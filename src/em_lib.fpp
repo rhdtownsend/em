@@ -46,6 +46,7 @@ module em_lib
 
   private
 
+  public :: dp
   public :: freq_t
   public :: init
   public :: create_star
@@ -443,7 +444,7 @@ contains
     integer, intent(in) :: id_extra
     integer             :: action
 
-    logical, parameter :: DEBUG = .TRUE.
+    logical, parameter :: DEBUG = .FALSE.
 
     type(star_info), pointer :: s
     integer                  :: ierr
