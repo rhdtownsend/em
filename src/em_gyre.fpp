@@ -131,8 +131,6 @@ contains
     real(dp), allocatable :: c_1(:)
     real(dp), allocatable :: Omega_rot(:)
 
-    integer :: k,unit
-
     ! Get the global and point data
 
     call star_get_pulse_data(id, 'GYRE', &
@@ -195,16 +193,6 @@ contains
       call ml%set_Gamma_1(Gamma_1)
 
       call ml%set_Omega_rot(Omega_rot)
-
-      ! Write out a text file
-
-      open(unit=unit, FILE='model.dat', STATUS='replace')
-
-      do k = 1, n
-         write(unit, *) k, x(k), V_2(k), As(k), U(k), c_1(k), rho(k)
-      end do
-
-      close(unit)
 
     end associate
 
