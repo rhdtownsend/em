@@ -1,7 +1,7 @@
 ! Module   : em_test
 ! Purpose  : test frontend for Embedded MESA
 !
-! Copyright 2016 Rich Townsend
+! Copyright 2016-2017 Rich Townsend
 
 $include 'core.inc'
 
@@ -9,13 +9,8 @@ program em_test
 
   ! Uses
 
-!  use core_kinds
-
   use em_lib
   
-  use star_lib
-  use star_def
-
   use ISO_FORTRAN_ENV
 
   ! No implicit typing
