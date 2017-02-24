@@ -28,6 +28,7 @@ module em_gyre
   use gyre_grid_factory
   use gyre_mode
   use gyre_mode_par
+  use gyre_model
   use gyre_model_par
   use gyre_num_par
   use gyre_osc_par
@@ -183,16 +184,16 @@ contains
 
       Omega_rot = 0._dp
 
-      allocate(ml, SOURCE=evol_model_t(x, M_star, R_star, L_star, .FALSE., ml_p))
+      allocate(ml, SOURCE=evol_model_t(x, M_star, R_star, L_star, ml_p))
 
-      call ml%set_V_2(V_2)
-      call ml%set_As(As)
-      call ml%set_U(U)
-      call ml%set_c_1(c_1)
+      call ml%define(I_V_2, V_2)
+      call ml%define(I_AS, As)
+      call ml%define(I_U, U)
+      call ml%define(I_C_1, c_1)
 
-      call ml%set_Gamma_1(Gamma_1)
+      call ml%define(I_GAMMA_1, Gamma_1)
 
-      call ml%set_Omega_rot(Omega_rot)
+      call ml%define(I_OMEGA_ROT, Omega_rot)
 
     end associate
 
@@ -284,7 +285,9 @@ contains
                       alpha_exp=0._dp, &
                       alpha_thm=0._dp, &
                       alpha_str=0._dp, &
-                      n_center=5, &
+                      dx_min=SQRT(EPSILON(0._dp)), &
+                      n_inner=5, &
+                      n_iter_max=0, &
                       tag_list='')
 
     ! Scan
@@ -294,7 +297,8 @@ contains
     sc_p(1) = scan_par_t(freq_min=freq_min, &
                          freq_max=freq_max, &
                          n_freq=n_freq, &
-                         freq_units=freq_units, &
+                         freq_min_units=freq_units, &
+                         freq_max_units=freq_units, &
                          freq_frame='INERTIAL', &
                          grid_type='LINEAR', &
                          grid_frame='INERTIAL', &
