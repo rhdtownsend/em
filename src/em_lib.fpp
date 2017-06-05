@@ -19,6 +19,7 @@ module em_lib
   use star_def
   use const_def, only: dp
   use atm_lib
+  use eos_lib
 
   use ISO_FORTRAN_ENV
 
@@ -188,6 +189,11 @@ contains
     
     s%tau_base = atm_tau_base(which_atm, ierr)
     $ASSERT(ierr == 0,Failed in atm_tau_base)
+
+    ! Set up EOS blending
+
+    call eos_set_HELM_OPAL_Zs(s%eos_handle, 1d0, 1d0, ierr)
+    $ASSERT(ierr == 0,Failed in eos_set_HELM_OPAL_Zs)
 
     ! Create the star as a pre-MS object (cannot start with a ZAMS
     ! model, because we use non-standard helium abundances)
