@@ -258,6 +258,7 @@ contains
                      outer_bound='JCD', &
                      inertia_norm='BOTH', &
                      time_factor='OSC', &
+                     conv_scheme='FROZEN_PESNELL_1', &
                      tag_list='', &
                      nonadiabatic=.FALSE., &
                      cowling_approx=.FALSE., &
