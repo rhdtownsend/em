@@ -1,4 +1,5 @@
-! Module   : em_lib
+
+  ! Module   : em_lib
 ! Purpose  : main Embedded MESA module
 !
 ! Copyright 2016 Rich Townsend
@@ -39,6 +40,8 @@ module em_lib
   real(dp), save      :: dt_frac_m   ! Timestep limit fraction
 
   real(dp), save :: Teff_m ! Effective temperature of best model
+  real(dp), save :: logg_m ! Surface gravity of best model
+  real(dp), save :: FeH_m  ! Metallicity of best model
   real(dp), save :: R_m    ! Radius of best model
   real(dp), save :: L_m    ! Luminosity of best model
   real(dp), save :: age_m  ! Age of best model
@@ -125,9 +128,9 @@ contains
 
     s%initial_mass = M
     s%initial_y = Y
-    s%initial_z = Z
-
+    s%initial_Z = Z
     s%mixing_length_alpha = alpha
+    s%max_age = 15.d9
 
     s%num_cells_for_smooth_brunt_B = 0
     s%add_double_points_to_pulse_data = .TRUE.
@@ -277,6 +280,8 @@ contains
           first_try = .FALSE.
                
        end do step_loop
+
+       print *,'Evolved:', s%star_age, s%time_step, s%why_TLim, result
 
        ! Once we get here, the only options are keep_going or terminate.
        ! redo, retry, or backup must be done inside the step_loop
@@ -486,6 +491,8 @@ contains
     ! Decide whether to run GYRE at all
 
     Delta_nu_obs = fr_obs_m(0)%Delta_nu()
+
+    print *,'Delta_nu_obs:',Delta_nu_obs
 
     if (.NOT. call_run_gyre) then
        call_run_gyre = ABS(Delta_nu_obs - s%delta_nu) <= f_enter_m*Delta_nu_obs
@@ -774,16 +781,20 @@ contains
 
   !****
 
-  subroutine get_mod_data (Teff, R, L, age)
+  subroutine get_mod_data (Teff, logg, FeH, R, L, age)
 
     real(dp), intent(out) :: Teff
+    real(dp), intent(out) :: logg
+    real(dp), intent(out) :: FeH
     real(dp), intent(out) :: R
     real(dp), intent(out) :: L
     real(dp), intent(out) :: age
-
+    
     ! Return best-fit model data
 
     Teff = Teff_m
+    logg = logg_m
+    FeH = FeH_m
     R = R_m
     L = L_m
     age = age_m
@@ -801,6 +812,8 @@ contains
     ! Clear model data
 
     Teff_m = 0._dp
+    logg_m = 0._dp
+    FeH_m = 0._dp
     R_m = 0._dp
     L_m = 0._dp
     age_m = 0._dp
@@ -828,6 +841,9 @@ contains
     ! Store model data
 
     Teff_m = s%Teff
+    logg_m = s%log_surface_gravity
+    FeH_m = log10((1.-s%surface_h1-s%surface_he3-s%surface_he4)/s%surface_h1)+1.64d0
+    !FeH_m = log10((s%surface_z / s%surface_x) / 0.02293d0 )
     R_m = s%photosphere_r
     L_m = s%photosphere_L
     age_m = s%star_age

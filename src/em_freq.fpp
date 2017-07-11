@@ -24,6 +24,7 @@ module em_freq
      real(dp), allocatable :: nu(:)
      real(dp), allocatable :: dnu(:)
      integer, allocatable  :: n_pg(:)
+     real(dp), allocatable :: E_norm(:)
      integer               :: n = 0
    contains
      private
@@ -44,16 +45,18 @@ module em_freq
 
 contains
 
-  function freq_t_ (nu, dnu, n_pg) result (fr)
+  function freq_t_ (nu, dnu, E_norm, n_pg) result (fr)
 
     real(dp), intent(in) :: nu(:)
     real(dp), intent(in) :: dnu(:)
+    real(dp), intent(in) :: E_norm(:)
     integer, intent(in)  :: n_pg(:)
     type(freq_t)         :: fr
 
     integer :: i(SIZE(nu))
 
     $CHECK_BOUNDS(SIZE(dnu),SIZE(nu))
+    $CHECK_BOUNDS(SIZE(E_norm),SIZE(nu))
     $CHECK_BOUNDS(SIZE(n_pg),SIZE(nu))
 
     ! Construct the freq_t
@@ -62,6 +65,8 @@ contains
 
     fr%nu = nu(i)
     fr%dnu = dnu(i)
+
+    fr%E_norm = E_norm(i)
 
     fr%n_pg = n_pg(i)
 
@@ -96,5 +101,3 @@ contains
   end function Delta_nu
 
 end module em_freq
-
-  

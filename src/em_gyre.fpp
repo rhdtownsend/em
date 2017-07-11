@@ -101,7 +101,9 @@ contains
     n_md = SIZE(md)
 
     fr_mod = freq_t([(REAL(md(i_md)%freq('UHZ', 'INERTIAL')), i_md=1,n_md)], &
-         [(1._dp, i_md=1,n_md)], md%n_pg)
+         [(1._dp, i_md=1,n_md)], &
+         [(md(i_md)%E_norm(), i_md=1,n_md)], &
+         md%n_pg)
 
     ! Free up the model
 
@@ -251,17 +253,18 @@ contains
 
     ! Oscillation
 
-    os_p = osc_par_t(x_ref=HUGE(0._dp), &
+    os_p = osc_par_t(x_ref=1._dp, &
                      rotation_method='NULL', &
                      variables_set='GYRE', &
                      inner_bound='REGULAR', &
                      outer_bound='JCD', &
-                     inertia_norm='BOTH', &
+                     inertia_norm='RADIAL', &
                      time_factor='OSC', &
                      conv_scheme='FROZEN_PESNELL_1', &
                      tag_list='', &
                      nonadiabatic=.FALSE., &
                      cowling_approx=.FALSE., &
+                     eddington_approx=.TRUE., &
                      narf_approx=.FALSE., &
                      reduce_order=.TRUE.)
 
