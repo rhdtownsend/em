@@ -226,6 +226,8 @@ contains
 
     integer, intent(in) :: id
 
+    logical, parameter :: DEBUG = .FALSE.
+
     type(star_info), pointer :: s
     integer                  :: ierr
     logical                  :: first_try
@@ -281,7 +283,9 @@ contains
                
        end do step_loop
 
-       print *,'Evolved:', s%star_age, s%time_step, s%why_TLim, result
+       if (DEBUG) then
+          write(OUTPUT_UNIT, *) 'Evolved:', s%star_age, s%time_step, s%why_TLim, result
+       endif
 
        ! Once we get here, the only options are keep_going or terminate.
        ! redo, retry, or backup must be done inside the step_loop
@@ -492,7 +496,9 @@ contains
 
     Delta_nu_obs = fr_obs_m(0)%Delta_nu()
 
-    print *,'Delta_nu_obs:',Delta_nu_obs
+    if (DEBUG) then
+       write(OUTPUT_UNIT, *) 'Delta_nu_obs:',Delta_nu_obs
+    end if
 
     if (.NOT. call_run_gyre) then
        call_run_gyre = ABS(Delta_nu_obs - s%delta_nu) <= f_enter_m*Delta_nu_obs

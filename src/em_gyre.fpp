@@ -261,6 +261,10 @@ contains
                      inertia_norm='RADIAL', &
                      time_factor='OSC', &
                      conv_scheme='FROZEN_PESNELL_1', &
+                     deps_scheme='MODEL', &
+                     deps_file='', &
+                     deps_file_format='', &
+                     complex_rot=.FALSE., &
                      tag_list='', &
                      nonadiabatic=.FALSE., &
                      cowling_approx=.FALSE., &
