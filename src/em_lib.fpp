@@ -32,6 +32,7 @@ module em_lib
 
   type(freq_t), save :: fr_obs_m(0:3) ! Observed frequencies
   type(freq_t), save :: fr_mod_m(0:3) ! Model frequencies
+  type(freq_t), save :: fr_cor_m(0:3) ! Model frequencies
 
   character(64), save :: state_m     ! State-machine state
   real(dp), save      :: f_enter_m   ! Threshold for entering GYRE calcs
@@ -45,6 +46,8 @@ module em_lib
   real(dp), save :: R_m    ! Radius of best model
   real(dp), save :: L_m    ! Luminosity of best model
   real(dp), save :: age_m  ! Age of best model
+  real(dp), save :: a3     ! Coefficient of cubic term
+  real(dp), save :: a1     ! Coefficient of inverse term
 
   ! Access specifiers
 
@@ -61,7 +64,10 @@ module em_lib
   public :: set_obs_freqs
   public :: clear_obs_freqs
   public :: get_mod_freqs
+  public :: get_cor_freqs
   public :: get_mod_data
+  public :: apply_cubic_correction
+  public :: apply_combined_correction
 
 contains
 
@@ -694,9 +700,116 @@ contains
     ! Finish
 
     return
-
+      
   end function extras_check_model_seismic_
 
+  !****
+
+  subroutine match_modes ()
+    ! match observed modes to model modes one by one
+    ! currently naive: just finds nearest mode
+    integer :: i, j, l
+    do l = 0, 3
+       if (fr_obs_m(l)%n < 1) cycle
+       fr_cor_m(l) = fr_obs_m(l)
+
+       do i = 1, fr_obs_m(l)%n
+          j = MINLOC(ABS(fr_mod_m(l)%nu - fr_obs_m(l)%nu(i)), DIM=1)
+          fr_cor_m(l)%nu(i) = fr_mod_m(l)%nu(j)
+          fr_cor_m(l)%E_norm(i) = fr_mod_m(l)%E_norm(j)
+          fr_cor_m(l)%n_pg(i) = fr_mod_m(l)%n_pg(j)
+       end do
+    end do
+  end subroutine match_modes
+
+  !****
+  
+  subroutine apply_cubic_correction ()
+    real(dp) :: X, y, XtX, Xty
+    integer :: i, j, l
+
+    call match_modes
+
+    XtX = 0._dp
+    Xty = 0._dp
+    X = 0._dp
+    y = 0._dp
+
+    do l = 0, 3
+       if (fr_obs_m(l)%n < 1) cycle
+       do i = 1, fr_obs_m(l)%n
+          X = fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
+          y = (fr_obs_m(l)%nu(i)-fr_cor_m(l)%nu(i))/fr_obs_m(l)%dnu(i)
+
+          XtX = XtX + X*X
+          Xty = Xty + X*y
+       end do
+    end do
+
+    a3 = Xty/XtX
+
+    do l = 0, 3
+       if (fr_obs_m(l)%n < 1) cycle
+       do i = 1, fr_obs_m(l)%n
+          fr_cor_m(l)%nu(i) = fr_cor_m(l)%nu(i) &
+               + a3*fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)
+       end do
+    end do
+
+  end subroutine apply_cubic_correction
+  
+  !****
+
+  subroutine apply_combined_correction ()
+    real(dp) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
+    integer :: i, j, l
+
+    call match_modes
+
+    XtX = 0._dp
+    Xty = 0._dp
+    X = 0._dp
+    y = 0._dp
+
+    do l = 0, 3
+       if (fr_obs_m(l)%n < 1) cycle
+       do i = 1, fr_obs_m(l)%n
+          X(1) = fr_cor_m(l)%nu(i)**(-1)/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
+          X(2) = fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
+          y = (fr_obs_m(l)%nu(i)-fr_cor_m(l)%nu(i))/fr_obs_m(l)%dnu(i)
+
+          XtX(1,1) = XtX(1,1) + X(1)*X(1)
+          XtX(1,2) = XtX(1,2) + X(1)*X(2)
+          XtX(2,2) = XtX(2,2) + X(2)*X(2)
+          Xty(1) = Xty(1) + X(1)*y
+          Xty(2) = Xty(2) + X(2)*y
+       end do
+    end do
+
+    XtX(2,1) = XtX(1,2)
+
+    XtXi(1,1) = XtX(2,2)
+    XtXi(2,2) = XtX(1,1)
+    XtXi(1,2) = -XtX(1,2)
+    XtXi(2,1) = -XtX(2,1)
+
+    detXtX = XtX(1,1)*XtX(2,2) - XtX(1,2)*XtX(2,1)
+    XtXi = XtXi/detXtX
+
+    a1 = XtXi(1,1)*Xty(1) + XtXi(1,2)*Xty(2)
+    a3 = XtXi(2,1)*Xty(1) + XtXi(2,2)*Xty(2)
+
+    do l = 0, 3
+       if (fr_obs_m(l)%n < 1) cycle
+       do i = 1, fr_obs_m(l)%n
+          fr_cor_m(l)%nu(i) = fr_cor_m(l)%nu(i) &
+               + (a1*fr_cor_m(l)%nu(i)**(-1) + a3*fr_cor_m(l)%nu(i)**3) &
+               /fr_cor_m(l)%E_norm(i)
+       end do
+    end do
+
+  end subroutine apply_combined_correction
+  
   !****
 
   subroutine destroy_star (id)
@@ -770,6 +883,25 @@ contains
     return
 
   end function get_mod_freqs
+
+  !****
+
+  function get_cor_freqs (l) result (fr)
+
+    integer, intent(in) :: l
+    type(freq_t)        :: fr
+
+    ! Get model frequency data for harmonic degree l
+
+    $ASSERT(l >= LBOUND(fr_obs_m, 1) .AND. l <= UBOUND(fr_obs_m, 1),Invalid harmonic degree)
+
+    fr = fr_cor_m(l)
+
+    ! Finish
+
+    return
+
+  end function get_cor_freqs
 
   !****
 

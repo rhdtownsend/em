@@ -98,6 +98,40 @@ program em_test
   print *,'l=2 results (n_pg, nu, E_norm):'
   call write_results(fr_mod_2)
 
+  ! Get corrected frequencies
+
+  print *, 'Cubic corrected frequencies'
+  call apply_cubic_correction
+
+  fr_mod_0 = get_cor_freqs(0)
+  fr_mod_1 = get_cor_freqs(1)
+  fr_mod_2 = get_cor_freqs(2)
+
+  print *,'l=0 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_0)
+
+  print *,'l=1 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_1)
+
+  print *,'l=2 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_2)
+
+  print *, 'Combined corrected frequencies'
+  call apply_combined_correction
+
+  fr_mod_0 = get_cor_freqs(0)
+  fr_mod_1 = get_cor_freqs(1)
+  fr_mod_2 = get_cor_freqs(2)
+
+  print *,'l=0 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_0)
+
+  print *,'l=1 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_1)
+
+  print *,'l=2 results (n_pg, nu, E_norm):'
+  call write_results(fr_mod_2)
+
   ! Finish
 
 contains
