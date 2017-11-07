@@ -473,7 +473,8 @@ contains
     real(dp)                 :: Delta_nu_obs
     real(dp)                 :: Delta_nu_mod
     real(dp), save           :: Delta_nu_prev = 0._dp
-    type(freq_t)             :: fr_mod
+    type(freq_t)             :: fr_mod(0:3)
+    type(freq_t)             :: fr_cor(0:3)
     integer                  :: i_lo
     real(dp)                 :: nu_obs_lo
     real(dp)                 :: nu_mod_lo
@@ -515,25 +516,36 @@ contains
        return
     endif
 
+    ! call clear_mod_freqs_
+    ! call clear_cor_freqs_
+    fr_mod = freq_t()
+    fr_cor = freq_t()
+    
     ! Run GYRE for radial modes
 
-    call run_gyre(id, 0, fr_obs_m(0), fr_mod)
+    call run_gyre(id, 0, fr_obs_m(0), fr_mod(0))
 
-    Delta_nu_mod = fr_mod%Delta_nu()
+    ! Correct frequencies before bracketing
 
+    call apply_cubic_correction(fr_mod, fr_obs_m, fr_cor)
+
+    Delta_nu_mod = fr_cor(0)%Delta_nu()
+    
     ! Find the best match to the lowest-frequency observed mode
 
     nu_obs_lo = fr_obs_m(0)%nu(1)
 
-    i_lo = MINLOC(ABS(fr_mod%nu - nu_obs_lo), DIM=1)
+    i_lo = MINLOC(ABS(fr_cor(0)%nu - nu_obs_lo), DIM=1)
 
-    nu_mod_lo = fr_mod%nu(i_lo)
-    n_pg_lo = fr_mod%n_pg(i_lo)
+    nu_mod_lo = fr_cor(0)%nu(i_lo)
+    n_pg_lo = fr_cor(0)%n_pg(i_lo)
 
     ! Update discriminants
 
     y = nu_mod_lo - nu_obs_lo
     z = ABS(Delta_nu_mod - Delta_nu_obs)
+
+    write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
 
     ! (Possibly) switch to a new state
 
@@ -615,7 +627,7 @@ contains
 
                 call store_mod_data_(id)
 
-                fr_mod_m(0) = fr_mod
+                fr_mod_m(0) = fr_mod(0)
 
                 ! Run GYRE for non-radial modes
 
@@ -705,30 +717,38 @@ contains
 
   !****
 
-  subroutine match_modes ()
+  subroutine match_modes (fr_mod, fr_obs, fr_cor)
     ! match observed modes to model modes one by one
     ! currently naive: just finds nearest mode
+    type(freq_t), intent(in)  :: fr_mod(0:3)
+    type(freq_t), intent(in)  :: fr_obs(0:3)
+    type(freq_t), intent(out) :: fr_cor(0:3)
     integer :: i, j, l
     do l = 0, 3
-       if (fr_obs_m(l)%n < 1) cycle
-       fr_cor_m(l) = fr_obs_m(l)
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_mod(l)%n < 1) cycle
 
-       do i = 1, fr_obs_m(l)%n
-          j = MINLOC(ABS(fr_mod_m(l)%nu - fr_obs_m(l)%nu(i)), DIM=1)
-          fr_cor_m(l)%nu(i) = fr_mod_m(l)%nu(j)
-          fr_cor_m(l)%E_norm(i) = fr_mod_m(l)%E_norm(j)
-          fr_cor_m(l)%n_pg(i) = fr_mod_m(l)%n_pg(j)
+       fr_cor(l) = fr_obs(l)
+
+       do i = 1, fr_obs(l)%n
+          j = MINLOC(ABS(fr_mod(l)%nu - fr_obs(l)%nu(i)), DIM=1)
+          fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
+          fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
+          fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
        end do
     end do
   end subroutine match_modes
 
   !****
   
-  subroutine apply_cubic_correction ()
+  subroutine apply_cubic_correction (fr_mod, fr_obs, fr_cor)
+    type(freq_t), intent(in)  :: fr_mod(0:3)
+    type(freq_t), intent(in)  :: fr_obs(0:3)
+    type(freq_t), intent(out) :: fr_cor(0:3)
     real(dp) :: X, y, XtX, Xty
     integer :: i, j, l
 
-    call match_modes
+    call match_modes(fr_mod, fr_obs, fr_cor)
 
     XtX = 0._dp
     Xty = 0._dp
@@ -736,10 +756,11 @@ contains
     y = 0._dp
 
     do l = 0, 3
-       if (fr_obs_m(l)%n < 1) cycle
-       do i = 1, fr_obs_m(l)%n
-          X = fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
-          y = (fr_obs_m(l)%nu(i)-fr_cor_m(l)%nu(i))/fr_obs_m(l)%dnu(i)
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_cor(l)%n < 1) cycle
+       do i = 1, fr_obs(l)%n
+          X = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+          y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
 
           XtX = XtX + X*X
           Xty = Xty + X*y
@@ -749,10 +770,11 @@ contains
     a3 = Xty/XtX
 
     do l = 0, 3
-       if (fr_obs_m(l)%n < 1) cycle
-       do i = 1, fr_obs_m(l)%n
-          fr_cor_m(l)%nu(i) = fr_cor_m(l)%nu(i) &
-               + a3*fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_cor(l)%n < 1) cycle
+       do i = 1, fr_obs(l)%n
+          fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + a3*fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)
        end do
     end do
 
@@ -760,11 +782,14 @@ contains
   
   !****
 
-  subroutine apply_combined_correction ()
+  subroutine apply_combined_correction (fr_mod, fr_obs, fr_cor)
+    type(freq_t) :: fr_mod(0:3)
+    type(freq_t) :: fr_obs(0:3)
+    type(freq_t) :: fr_cor(0:3)
     real(dp) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
     integer :: i, j, l
 
-    call match_modes
+    call match_modes(fr_mod, fr_obs, fr_cor)
 
     XtX = 0._dp
     Xty = 0._dp
@@ -772,11 +797,12 @@ contains
     y = 0._dp
 
     do l = 0, 3
-       if (fr_obs_m(l)%n < 1) cycle
-       do i = 1, fr_obs_m(l)%n
-          X(1) = fr_cor_m(l)%nu(i)**(-1)/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
-          X(2) = fr_cor_m(l)%nu(i)**3/fr_cor_m(l)%E_norm(i)/fr_obs_m(l)%dnu(i)
-          y = (fr_obs_m(l)%nu(i)-fr_cor_m(l)%nu(i))/fr_obs_m(l)%dnu(i)
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_cor(l)%n < 1) cycle
+       do i = 1, fr_obs(l)%n
+          X(1) = fr_cor(l)%nu(i)**(-1)/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+          X(2) = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+          y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
 
           XtX(1,1) = XtX(1,1) + X(1)*X(1)
           XtX(1,2) = XtX(1,2) + X(1)*X(2)
@@ -800,11 +826,12 @@ contains
     a3 = XtXi(2,1)*Xty(1) + XtXi(2,2)*Xty(2)
 
     do l = 0, 3
-       if (fr_obs_m(l)%n < 1) cycle
-       do i = 1, fr_obs_m(l)%n
-          fr_cor_m(l)%nu(i) = fr_cor_m(l)%nu(i) &
-               + (a1*fr_cor_m(l)%nu(i)**(-1) + a3*fr_cor_m(l)%nu(i)**3) &
-               /fr_cor_m(l)%E_norm(i)
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_cor(l)%n < 1) cycle
+       do i = 1, fr_obs(l)%n
+          fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + (a1*fr_cor(l)%nu(i)**(-1) + a3*fr_cor(l)%nu(i)**3) &
+               /fr_cor(l)%E_norm(i)
        end do
     end do
 
@@ -864,6 +891,20 @@ contains
     return
 
   end subroutine clear_obs_freqs
+
+  !****
+
+  subroutine clear_cor_freqs_ ()
+
+    ! Clear corrected frequency data
+
+    fr_cor_m = freq_t()
+
+    ! Finish
+
+    return
+
+  end subroutine clear_cor_freqs_
 
   !****
 
