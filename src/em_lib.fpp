@@ -504,7 +504,7 @@ contains
     Delta_nu_obs = fr_obs_m(0)%Delta_nu()
 
     if (DEBUG) then
-       write(OUTPUT_UNIT, *) 'Delta_nu_obs:',Delta_nu_obs
+       write(OUTPUT_UNIT, *) 'Delta_nu_obs:', Delta_nu_obs
     end if
 
     if (.NOT. call_run_gyre) then
@@ -531,6 +531,10 @@ contains
 
     Delta_nu_mod = fr_cor(0)%Delta_nu()
     
+    if (DEBUG) then
+       write(OUTPUT_UNIT, *) 'Delta_nu_mod:', Delta_nu_mod
+    end if
+
     ! Find the best match to the lowest-frequency observed mode
 
     nu_obs_lo = fr_obs_m(0)%nu(1)
@@ -543,7 +547,8 @@ contains
     ! Update discriminants
 
     y = nu_mod_lo - nu_obs_lo
-    z = ABS(Delta_nu_mod - Delta_nu_obs)
+    ! z = ABS(Delta_nu_mod - Delta_nu_obs)
+    call chi2_radial(fr_cor, fr_obs_m, z)
 
     write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
 
@@ -582,6 +587,10 @@ contains
           y_b = y
 
           state_m = 'BRACKET'
+
+          if (DEBUG) then
+             write(OUTPUT_UNIT, *) 'Bracket created:', x_a, x_b, y_a, y_b
+          endif
 
        endif
 
@@ -741,6 +750,21 @@ contains
 
   !****
   
+  subroutine chi2_radial(fr_mod, fr_obs, chi2)
+    type(freq_t), intent(in)  :: fr_mod(0:3)
+    type(freq_t), intent(in)  :: fr_obs(0:3)
+    real(dp), intent(out) :: chi2
+    integer :: i
+
+    chi2 = 0d0
+    do i = 1, fr_obs(0)%n
+       chi2 = chi2 + (fr_mod(0)%nu(i)-fr_obs(0)%nu(i))**2/fr_obs(0)%dnu(i)**2
+    end do
+
+  end subroutine chi2_radial
+
+  !****
+
   subroutine apply_cubic_correction (fr_mod, fr_obs, fr_cor)
     type(freq_t), intent(in)  :: fr_mod(0:3)
     type(freq_t), intent(in)  :: fr_obs(0:3)
