@@ -1,5 +1,4 @@
-
-  ! Module   : em_lib
+! Module   : em_lib
 ! Purpose  : main Embedded MESA module
 !
 ! Copyright 2016 Rich Townsend
@@ -40,18 +39,25 @@ module em_lib
   real(dp), save      :: y_tol_m     ! Frequency convergence tolerance
   real(dp), save      :: dt_frac_m   ! Timestep limit fraction
 
-  real(dp), save :: Teff_m ! Effective temperature of best model
-  real(dp), save :: logg_m ! Surface gravity of best model
-  real(dp), save :: FeH_m  ! Metallicity of best model
-  real(dp), save :: R_m    ! Radius of best model
-  real(dp), save :: L_m    ! Luminosity of best model
-  real(dp), save :: age_m  ! Age of best model
-  real(dp), save :: a3     ! Coefficient of cubic term
-  real(dp), save :: a1     ! Coefficient of inverse term
+  real(dp), save :: Teff_m  ! Effective temperature of best model
+  real(dp), save :: logg_m  ! Surface gravity of best model
+  real(dp), save :: FeH_m   ! Metallicity of best model
+  real(dp), save :: R_m	    ! Radius of best model
+  real(dp), save :: L_m	    ! Luminosity of best model
+  real(dp), save :: age_m   ! Age of best model
+  real(dp), save :: Rcz_m   ! Rcz/Rsun of best model
+  real(dp), save :: a3	    ! Coefficient of cubic term
+  real(dp), save :: a1	    ! Coefficient of inverse term
 
   ! Access specifiers
 
   private
+
+  public :: age_m
+  public :: R_m
+  public :: Rcz_m
+  public :: Teff_m
+  public :: FeH_m
 
   public :: dp
   public :: freq_t
@@ -550,7 +556,9 @@ contains
     ! z = ABS(Delta_nu_mod - Delta_nu_obs)
     call chi2_radial(fr_cor, fr_obs_m, z)
 
-    write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
+    if (DEBUG) then
+        write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
+    end if
 
     ! (Possibly) switch to a new state
 
@@ -706,6 +714,20 @@ contains
     case ('FINISH')
 
        action = terminate
+
+       z_min = 0._dp
+       x_a = 0._dp
+       x_b = 0._dp
+       y_a = 0._dp
+       y_b = 0._dp
+       x_new = 0._dp
+       delta_t = 0._dp
+       call_run_gyre = .FALSE.
+
+       Delta_nu_mod = 0._dp
+       nu_mod_lo = 0._dp
+       n_pg_lo = 0._dp
+       y = 0._dp
 
     end select
 
@@ -1020,6 +1042,7 @@ contains
     R_m = 0._dp
     L_m = 0._dp
     age_m = 0._dp
+    Rcz_m = 0._dp
 
     ! Finish
 
@@ -1046,10 +1069,10 @@ contains
     Teff_m = s%Teff
     logg_m = s%log_surface_gravity
     FeH_m = log10((1.-s%surface_h1-s%surface_he3-s%surface_he4)/s%surface_h1)+1.64d0
-    !FeH_m = log10((s%surface_z / s%surface_x) / 0.02293d0 )
     R_m = s%photosphere_r
     L_m = s%photosphere_L
     age_m = s%star_age
+    Rcz_m = s%conv_mx1_bot_r
 
     ! Finish
 
