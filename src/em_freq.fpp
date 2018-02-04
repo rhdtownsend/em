@@ -14,6 +14,8 @@ module em_freq
 
   use em_util
 
+  use ISO_FORTRAN_ENV
+
   ! No implicit typing
 
   implicit none
