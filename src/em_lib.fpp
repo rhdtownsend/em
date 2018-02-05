@@ -42,12 +42,12 @@ module em_lib
   real(dp), save :: Teff_m  ! Effective temperature of best model
   real(dp), save :: logg_m  ! Surface gravity of best model
   real(dp), save :: FeH_m   ! Metallicity of best model
-  real(dp), save :: R_m	    ! Radius of best model
-  real(dp), save :: L_m	    ! Luminosity of best model
+  real(dp), save :: R_m     ! Radius of best model
+  real(dp), save :: L_m     ! Luminosity of best model
   real(dp), save :: age_m   ! Age of best model
   real(dp), save :: Rcz_m   ! Rcz/Rsun of best model
-  real(dp), save :: a3	    ! Coefficient of cubic term
-  real(dp), save :: a1	    ! Coefficient of inverse term
+  real(dp), save :: a3      ! Coefficient of cubic term
+  real(dp), save :: a1      ! Coefficient of inverse term
 
   ! Access specifiers
 
