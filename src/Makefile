@@ -1,8 +1,8 @@
 # Variables
 
-TARGETS=em_test
+TARGETS=em_test ff_amp2.o
 
-DEBUG=yes
+DEBUG=no
 
 # MESA stuff
 
