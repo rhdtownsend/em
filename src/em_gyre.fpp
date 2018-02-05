@@ -70,6 +70,7 @@ contains
     type(grid_par_t)              :: gr_p
     type(scan_par_t), allocatable :: sc_p(:)
     type(evol_model_t), pointer   :: ml
+    type(context_t), pointer      :: cx
     type(mode_t), allocatable     :: md(:)
     integer                       :: n_md
     integer                       :: i_md
@@ -95,7 +96,7 @@ contains
 
     ! Find modes
 
-    call find_gyre_modes(ml, md_p, os_p, nm_p, gr_p, sc_p, md)
+    call find_gyre_modes(ml, md_p, os_p, nm_p, gr_p, sc_p, cx, md)
 
     ! Store data
 
@@ -106,8 +107,9 @@ contains
          [(md(i_md)%E_norm(), i_md=1,n_md)], &
          md%n_pg)
 
-    ! Free up the model
+    ! Free up the context and model
 
+    deallocate(cx)
     deallocate(ml)
 
     ! Finish
@@ -322,7 +324,7 @@ contains
 
   !****
 
-  subroutine find_gyre_modes (ml, md_p, os_p, nm_p, gr_p, sc_p, md)
+  subroutine find_gyre_modes (ml, md_p, os_p, nm_p, gr_p, sc_p, cx, md)
 
     type(evol_model_t), pointer, intent(in) :: ml
     type(mode_par_t), intent(in)            :: md_p
@@ -330,6 +332,7 @@ contains
     type(num_par_t), intent(in)             :: nm_p
     type(grid_par_t), intent(in)            :: gr_p
     type(scan_par_t), intent(in)            :: sc_p(:)
+    type(context_t), pointer, intent(out)   :: cx
     type(mode_t), allocatable, intent(out)  :: md(:)
 
     type(grid_t)                :: gr
@@ -337,9 +340,6 @@ contains
     class(r_bvp_t), allocatable :: bp
     integer                     :: n_md
     integer                     :: d_md
-
-    integer                  :: i
-    type(context_t), pointer :: cx => null()
 
     ! Create the scaffold grid (used in setting up the frequency array)
 
@@ -383,10 +383,6 @@ contains
      ! Resize the md array just to the modes found
 
      md = md(:n_md)
-
-     ! Clean up
-
-     deallocate(cx)
 
      ! Finish
 
