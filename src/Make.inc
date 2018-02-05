@@ -4,19 +4,19 @@
 # The following flags can be edited (set to either yes or no)
 
 # Enable debugging (with a performance penalty)
-DEBUG=no
+DEBUG?=no
 
 # Enable OpenMP parallelization
-OMP=yes
+OMP?=yes
 
 # Enable MPI parallelization
-MPI=no
+MPI?=no
 
 # Use double precision arithmetic (best left to 'yes')
-DOUBLE_PRECISION=yes
+DOUBLE_PRECISION?=yes
 
 # Use IEEE fortran features
-IEEE=no
+IEEE?=no
 
 ############ DO NOT EDIT BELOW THIS LINE ############
 ### (unless you think you know what you're doing) ###
