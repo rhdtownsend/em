@@ -21,6 +21,7 @@ module em_gyre
 
   use gyre_ad_bvp
   use gyre_bvp
+  use gyre_context
   use gyre_evol_model
   use gyre_ext
   use gyre_grid
@@ -254,7 +255,7 @@ contains
     ! Oscillation
 
     os_p = osc_par_t(x_ref=1._dp, &
-                     rotation_method='NULL', &
+                     rotation_method='DOPPLER', &
                      variables_set='GYRE', &
                      inner_bound='REGULAR', &
                      outer_bound='JCD', &
@@ -264,9 +265,10 @@ contains
                      deps_scheme='MODEL', &
                      deps_file='', &
                      deps_file_format='', &
-                     complex_rot=.FALSE., &
+                     complex_lambda=.FALSE., &
                      tag_list='', &
                      nonadiabatic=.FALSE., &
+                     quasiad_eigfuncs=.FALSE., &
                      cowling_approx=.FALSE., &
                      eddington_approx=.TRUE., &
                      narf_approx=.FALSE., &
@@ -336,7 +338,8 @@ contains
     integer                     :: n_md
     integer                     :: d_md
 
-    integer :: i
+    integer                  :: i
+    type(context_t), pointer :: cx => null()
 
     ! Create the scaffold grid (used in setting up the frequency array)
 
@@ -354,12 +357,18 @@ contains
 
     if (gr%n_k > 25000) stop 'Done'
 
+    ! Set up the context
+
+    allocate(cx)
+
+    cx = context_t(ml, gr%pt_i(), gr%pt_o(), md_p, os_p)
+
     ! Create the bvp_t
 
      if (md_p%l == 0 .AND. os_p%reduce_order) then
-        allocate(bp, SOURCE=rad_bvp_t(ml, gr, md_p, nm_p, os_p))
+        allocate(bp, SOURCE=rad_bvp_t(cx, gr, md_p, nm_p, os_p))
      else
-        allocate(bp, SOURCE=ad_bvp_t(ml, gr, md_p, nm_p, os_p))
+        allocate(bp, SOURCE=ad_bvp_t(cx, gr, md_p, nm_p, os_p))
      endif
 
      ! Find modes
@@ -374,6 +383,10 @@ contains
      ! Resize the md array just to the modes found
 
      md = md(:n_md)
+
+     ! Clean up
+
+     deallocate(cx)
 
      ! Finish
 
