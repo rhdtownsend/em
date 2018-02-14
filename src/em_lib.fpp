@@ -535,7 +535,7 @@ contains
 
     call apply_cubic_correction(fr_mod, fr_obs_m, fr_cor)
 
-    Delta_nu_mod = fr_cor(0)%Delta_nu()
+    Delta_nu_mod = fr_mod(0)%Delta_nu()
     
     if (DEBUG) then
        write(OUTPUT_UNIT, *) 'Delta_nu_mod:', Delta_nu_mod
@@ -578,7 +578,8 @@ contains
 
     case ('EVOLVE')
 
-       if (ABS(Delta_nu_mod - Delta_nu_obs) > f_exit_m*Delta_nu_obs) then
+       ! if (ABS(Delta_nu_mod - Delta_nu_obs) > f_exit_m*Delta_nu_obs) then
+       if (Delta_nu_mod < Delta_nu_obs - f_exit_m*Delta_nu_obs) then
 
           state_m = 'FINISH'
 
