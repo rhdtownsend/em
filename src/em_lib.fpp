@@ -487,6 +487,8 @@ contains
     real(dp), save           :: nu_mod_prev
     integer                  :: n_pg_lo
     integer, save            :: n_pg_prev
+    integer                  :: n(100)
+    integer, save            :: n_prev(100)
     real(dp)                 :: y
     real(dp)                 :: y_prev = 0._dp
     real(dp)                 :: z
@@ -550,6 +552,11 @@ contains
     nu_mod_lo = fr_cor(0)%nu(i_lo)
     n_pg_lo = fr_cor(0)%n_pg(i_lo)
 
+    n = 0
+    do l = 1, fr_cor(0)%n
+       n(l) = fr_cor(0)%n_pg(l)
+    end do
+
     ! Update discriminants
 
     y = nu_mod_lo - nu_obs_lo
@@ -583,7 +590,9 @@ contains
 
           state_m = 'FINISH'
 
-       elseif (y*y_prev <= 0._dp .AND. n_pg_lo == n_pg_prev) then
+       ! elseif (y*y_prev <= 0._dp .AND. n_pg_lo == n_pg_prev) then
+       elseif (y*y_prev <= 0._dp .AND. &
+            ALL(n_prev(1:fr_cor(0)%n) == fr_cor(0)%n_pg(1:fr_cor(0)%n))) then
 
           ! Set up a new bracket
 
@@ -605,7 +614,8 @@ contains
 
     case ('BRACKET')
 
-       if (n_pg_lo == n_pg_prev) then
+       ! if (n_pg_lo == n_pg_prev) then
+       if (ALL(n_prev(1:fr_cor(0)%n) == fr_cor(0)%n_pg(1:fr_cor(0)%n))) then
 
           ! Update the bracket
 
@@ -672,7 +682,8 @@ contains
           ! Abandon the bracket, because the fundamental mode wasn't found
 
           if (DEBUG) then
-             write(OUTPUT_UNIT, *) 'Abandoning bracket (fundamental not found)'
+             ! write(OUTPUT_UNIT, *) 'Abandoning bracket (fundamental not found)'
+             write(OUTPUT_UNIT, *) 'Abandoning bracket (could match mode orders)'
           endif
 
           s%dt = delta_t
@@ -738,6 +749,8 @@ contains
 
     nu_mod_prev = nu_mod_lo
     n_pg_prev = n_pg_lo
+
+    n_prev = n
 
     y_prev = y
 

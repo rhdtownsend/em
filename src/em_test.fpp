@@ -156,7 +156,7 @@ program em_test
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id, f_exit=0.05d0)
+  call evolve_star_seismic(id)
 
   ! Get model data
 
