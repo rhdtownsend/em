@@ -32,6 +32,9 @@ program em_test
   real(dp)     :: L
   real(dp)     :: age
 
+  real(dp), allocatable :: fr(:)
+  real(dp), allocatable :: ratios(:)
+
   ! Define observational frequencies
 
   fr_obs = freq_t()
@@ -219,7 +222,29 @@ program em_test
              fr_mod(i)%E_norm(j), fr_cor(i)%nu(j)
      end do
   end do
-  
+
+  allocate(fr(2))
+  fr(1) = 3000d0
+  fr(2) = 3150d0
+
+  allocate(ratios(size(fr)))
+  call get_r010(fr, fr_mod(0), fr_mod(1), ratios)
+
+  write(*,*) 'r010 ratios'
+  do i = 1, size(ratios)
+     write(*,*) i, fr(i), ratios(i)
+  end do
+  deallocate(ratios)
+
+  write(*,*) 'r02 ratios'
+  allocate(ratios(size(fr)))
+  call get_r02(fr, fr_mod(0), fr_mod(1), fr_mod(2), ratios)
+  do i = 1, size(ratios)
+     write(*,*) i, fr(i), ratios(i)
+  end do
+  deallocate(ratios)
+
+  deallocate(fr)
   ! Finish
 
 contains

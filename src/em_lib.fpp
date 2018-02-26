@@ -20,6 +20,7 @@ module em_lib
   use const_def, only: dp
   use atm_lib
   use eos_lib
+  use interp_1d_lib
 
   use ISO_FORTRAN_ENV
 
@@ -74,6 +75,8 @@ module em_lib
   public :: get_mod_data
   public :: apply_cubic_correction
   public :: apply_combined_correction
+  public :: get_r010
+  public :: get_r02
 
 contains
 
@@ -1003,6 +1006,167 @@ contains
     return
 
   end function get_cor_freqs
+
+  !****
+
+  subroutine get_r010 (fr, fr0, fr1, r010)
+
+    real(dp), intent(in) :: fr(:)
+    type(freq_t), intent(in) :: fr0, fr1
+    real(dp), allocatable :: r010(:)
+
+    real(dp) :: Delta_nu
+    integer :: i0, i1, end0, end1, i, n, l
+
+    ! parameters for interpolant
+    real(dp), allocatable :: x(:), y(:)
+    integer, parameter :: nwork = 6
+    real(dp), pointer :: work1(:)
+    character(len=256) :: interp_dbg_str
+    integer :: ierr
+
+    r010 = 0d0
+    
+    Delta_nu = fr0%Delta_nu()
+
+    i0 = 1
+    i1 = 1
+
+    do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
+       i0 = i0 + 1
+    end do
+    
+    do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
+       i1 = i1 + 1
+    end do
+
+    end0 = fr0%n
+    end1 = fr1%n
+
+    do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
+       end0 = end0 - 1
+    end do
+    
+    do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
+       end1 = end1 - 1
+    end do
+
+    !    number of l=0         number of l=1
+    n = (end0 - i0 + 1) + (end1 - i1 + 1) - 4
+    allocate(x(n), y(n))
+    x = 0d0
+    y = 0d0
+
+    ! write(*,*) 'i0, i1 =', i0, i1
+    ! write(*,*) 'fr0(i0), fr1(i1) =', fr0%nu(i0), fr1%nu(i1)
+    ! write(*,*) 'end0, end1 =', end0, end1
+    ! write(*,*) 'fr0(end0), fr1(end1) =', fr0%nu(end0), fr1%nu(end1)
+    ! write(*,*) 'n =', n
+
+    l = 0
+    if (fr1%nu(i1) < fr0%nu(i0)) l = 1
+    
+    do i = 1, n
+       if (l == 0) then
+          x(i) = fr0%nu(i0+1)
+          y(i) = (fr0%nu(i0) - 4d0*fr1%nu(i1) + 6d0*fr0%nu(i0+1) &
+               - 4d0*fr1%nu(i1+1) + fr0%nu(i0+2))/8d0
+          l = 1
+          i0 = i0 + 1
+       else if (l == 1) then
+          x(i) = fr1%nu(i1+1)
+          y(i) = -(fr1%nu(i1) - 4d0*fr0%nu(i0) + 6d0*fr1%nu(i1+1) &
+               - 4d0*fr0%nu(i0+1) + fr1%nu(i1+2))/8d0
+          l = 0
+          i1 = i1 + 1
+       else
+          stop 'l != 0 or 1 in get_r010'
+       end if
+    end do
+
+    allocate(work1(nwork*size(x)))
+    call interpolate_vector(n, x, size(fr), fr, y, r010, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+    deallocate(work1, x, y)
+
+  end subroutine get_r010
+
+  !****
+
+  subroutine get_r02 (fr, fr0, fr1, fr2, r02)
+
+    real(dp), intent(in) :: fr(:)
+    type(freq_t), intent(in) :: fr0, fr1, fr2
+    real(dp), allocatable :: r02(:)
+
+    real(dp) :: Delta_nu
+    integer :: i0, i1, i2, end0, end1, end2, i, n
+
+    ! parameters for interpolant
+    real(dp), allocatable :: x(:), y(:)
+    integer, parameter :: nwork = 6
+    real(dp), pointer :: work1(:)
+    character(len=256) :: interp_dbg_str
+    integer :: ierr
+
+    r02 = 0d0
+    
+    Delta_nu = fr0%Delta_nu()
+
+    i0 = 1
+    i1 = 1
+    i2 = 1
+
+    do while (fr0%nu(i0) < fr1%nu(i1))
+       i0 = i0 + 1
+    end do
+    
+    do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
+       i1 = i1 + 1
+    end do
+
+    do while (fr2%nu(i2) < fr1%nu(i1))
+       i2 = i2 + 1
+    end do
+
+    end0 = fr0%n
+    end1 = fr1%n
+    end2 = fr2%n
+
+    do while (fr0%nu(end0) > fr1%nu(end1))
+       end0 = end0 - 1
+    end do
+    
+    do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
+       end1 = end1 - 1
+    end do
+
+    do while (fr2%nu(end2) > fr1%nu(end2))
+       end2 = end2 - 1
+    end do
+
+    n = end2 - i2 + 1
+    allocate(x(n), y(n))
+    x = 0d0
+    y = 0d0
+
+    ! write(*,*) 'i0, i1, i2 =', i0, i1, i2
+    ! write(*,*) 'fr0(i0), fr1(i1), fr2(i2) =', fr0%nu(i0), fr1%nu(i1), fr2%nu(i2)
+    ! write(*,*) 'end0, end1 =', end0, end1, end2
+    ! write(*,*) 'fr0(end0), fr1(end1), fr2(end2) =', fr0%nu(end0), fr1%nu(end1), fr2%nu(end2)
+    ! write(*,*) 'n =', n
+    
+    do i = 0, n-1
+       x(i+1) = fr0%nu(i0+i)
+       y(i+1) = (fr0%nu(i0+i)-fr2%nu(i2+i))/(fr1%nu(i1+i+1)-fr1%nu(i1+i))
+    end do
+
+    allocate(work1(nwork*size(x)))
+    call interpolate_vector(n, x, size(fr), fr, y, r02, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+    deallocate(work1, x, y)
+
+  end subroutine get_r02
 
   !****
 
