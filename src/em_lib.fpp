@@ -77,6 +77,8 @@ module em_lib
   public :: apply_combined_correction
   public :: get_r010
   public :: get_r02
+  public :: get_r13
+  public :: chi2_ratios
 
 contains
 
@@ -1013,7 +1015,7 @@ contains
 
     real(dp), intent(in) :: fr(:)
     type(freq_t), intent(in) :: fr0, fr1
-    real(dp), allocatable :: r010(:)
+    real(dp), intent(out) :: r010(:)
 
     real(dp) :: Delta_nu
     integer :: i0, i1, end0, end1, i, n, l
@@ -1068,19 +1070,21 @@ contains
     
     do i = 1, n
        if (l == 0) then
+          Delta_nu = fr1%nu(i1+1) - fr1%nu(i1)
           x(i) = fr0%nu(i0+1)
           y(i) = (fr0%nu(i0) - 4d0*fr1%nu(i1) + 6d0*fr0%nu(i0+1) &
-               - 4d0*fr1%nu(i1+1) + fr0%nu(i0+2))/8d0
+               - 4d0*fr1%nu(i1+1) + fr0%nu(i0+2))/8d0/Delta_nu
           l = 1
           i0 = i0 + 1
        else if (l == 1) then
+          Delta_nu = fr0%nu(i0+1) - fr0%nu(i0)
           x(i) = fr1%nu(i1+1)
           y(i) = -(fr1%nu(i1) - 4d0*fr0%nu(i0) + 6d0*fr1%nu(i1+1) &
-               - 4d0*fr0%nu(i0+1) + fr1%nu(i1+2))/8d0
+               - 4d0*fr0%nu(i0+1) + fr1%nu(i1+2))/8d0/Delta_nu
           l = 0
           i1 = i1 + 1
        else
-          stop 'l != 0 or 1 in get_r010'
+          stop 'l /= 0 or 1 in get_r010'
        end if
     end do
 
@@ -1097,7 +1101,7 @@ contains
 
     real(dp), intent(in) :: fr(:)
     type(freq_t), intent(in) :: fr0, fr1, fr2
-    real(dp), allocatable :: r02(:)
+    real(dp) :: r02(:)
 
     real(dp) :: Delta_nu
     integer :: i0, i1, i2, end0, end1, end2, i, n
@@ -1141,7 +1145,7 @@ contains
        end1 = end1 - 1
     end do
 
-    do while (fr2%nu(end2) > fr1%nu(end2))
+    do while (fr2%nu(end2) > fr1%nu(end1))
        end2 = end2 - 1
     end do
 
@@ -1167,6 +1171,115 @@ contains
     deallocate(work1, x, y)
 
   end subroutine get_r02
+
+  !****
+
+  subroutine get_r13 (fr, fr0, fr1, fr3, r13)
+
+    real(dp), intent(in) :: fr(:)
+    type(freq_t), intent(in) :: fr0, fr1, fr3
+    real(dp) :: r13(:)
+
+    real(dp) :: Delta_nu
+    integer :: i0, i1, i3, end0, end1, end3, i, n
+
+    ! parameters for interpolant
+    real(dp), allocatable :: x(:), y(:)
+    integer, parameter :: nwork = 6
+    real(dp), pointer :: work1(:)
+    character(len=256) :: interp_dbg_str
+    integer :: ierr
+
+    r13 = 0d0
+    
+    Delta_nu = fr0%Delta_nu()
+
+    i0 = 1
+    i1 = 1
+    i3 = 1
+
+    do while (fr1%nu(i1) < fr0%nu(i0))
+       i1 = i1 + 1
+    end do
+    
+    do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
+       i0 = i0 + 1
+    end do
+
+    do while (fr3%nu(i3) < fr0%nu(i0))
+       i3 = i3 + 1
+    end do
+
+    end0 = fr0%n
+    end1 = fr1%n
+    end3 = fr3%n
+
+    do while (fr1%nu(end1) > fr0%nu(end0))
+       end1 = end1 - 1
+    end do
+    
+    do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
+       end0 = end0 - 1
+    end do
+
+    do while (fr3%nu(end3) > fr0%nu(end0))
+       end3 = end3 - 1
+    end do
+
+    n = end3 - i3 + 1
+    allocate(x(n), y(n))
+    x = 0d0
+    y = 0d0
+
+    ! write(*,*) 'i0, i1, i3 =', i0, i1, i3
+    ! write(*,*) 'fr0(i0), fr1(i1), fr3(i3) =', fr0%nu(i0), fr1%nu(i1), fr3%nu(i3)
+    ! write(*,*) 'end0, end1 =', end0, end1, end3
+    ! write(*,*) 'fr0(end0), fr1(end1), fr3(end3) =', fr0%nu(end0), fr1%nu(end1), fr3%nu(end3)
+    ! write(*,*) 'n =', n
+    
+    do i = 0, n-1
+       x(i+1) = fr1%nu(i1+i)
+       y(i+1) = (fr1%nu(i1+i)-fr3%nu(i3+i))/(fr0%nu(i0+i+1)-fr0%nu(i0+i))
+    end do
+
+    allocate(work1(nwork*size(x)))
+    call interpolate_vector(n, x, size(fr), fr, y, r13, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+    deallocate(work1, x, y)
+
+  end subroutine get_r13
+
+  !****
+  
+  subroutine chi2_ratios(n_r010, n_r02, n_r13, r_freq, r_obs, r_invcov, fr_mod, chi2)
+    type(freq_t), intent(in) :: fr_mod(0:3)
+    integer, intent(in) :: n_r010, n_r02, n_r13
+    real(dp), intent(in) :: r_freq(:), r_obs(:), r_invcov(:,:)
+    real(dp), intent(out) :: chi2
+
+    real(dp), allocatable :: r_mod(:)
+    integer :: n_r, i, j
+
+    n_r = n_r010 + n_r02 + n_r13
+    allocate(r_mod(n_r))
+    r_mod = 0d0
+
+    if (n_r010 > 0) call get_r010(r_freq(1:n_r010), fr_mod(0), fr_mod(1), r_mod(1:n_r010))
+    if (n_r02 > 0) call get_r02(r_freq(n_r010+1:n_r010+n_r02), &
+         fr_mod(0), fr_mod(1), fr_mod(2), r_mod(n_r010+1:n_r010+n_r02))
+    if (n_r13 > 0) call get_r13(r_freq(n_r010+n_r02+1:n_r), &
+         fr_mod(0), fr_mod(1), fr_mod(3), r_mod(n_r010+n_r02+1:n_r))
+
+    chi2 = 0d0
+    do i = 1, n_r
+       do j = 1, n_r
+          chi2 = chi2 + (r_mod(i)-r_obs(i))*r_invcov(i,j)*(r_mod(j)-r_obs(j))
+       end do
+    end do
+    
+    deallocate(r_mod)
+
+  end subroutine chi2_ratios
 
   !****
 

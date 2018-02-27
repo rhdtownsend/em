@@ -32,8 +32,12 @@ program em_test
   real(dp)     :: L
   real(dp)     :: age
 
-  real(dp), allocatable :: fr(:)
-  real(dp), allocatable :: ratios(:)
+  real(dp), allocatable :: r_mod(:)
+  real(dp), allocatable :: r_freq(:)
+  real(dp), allocatable :: r_obs(:)
+  real(dp), allocatable :: r_invcov(:,:)
+  integer :: n_r, n_r010, n_r02, n_r13, ierr
+  real(dp) :: chi2
 
   ! Define observational frequencies
 
@@ -138,6 +142,45 @@ program em_test
   call set_obs_freqs(1, fr_obs(1))
   call set_obs_freqs(2, fr_obs(2))
 
+  ! Read data and (inverse) covariance for ratios
+  ! Produced externally with Python
+  ! I should be better about IO units but let's first make something that works
+  n_r010 = 19
+  n_r02 = 11
+  n_r13 = 0
+  n_r = n_r010 + n_r02 + n_r13
+
+  allocate(r_freq(n_r))
+  allocate(r_obs(n_r))
+  allocate(r_invcov(n_r, n_r))
+  
+  ierr = 0
+  open(unit=10, file='ratio_means.txt', status='old', iostat=ierr)
+  if (ierr /= 0) then
+     write(*,*) 'failed to open ratio_means.txt'
+     stop 1
+  end if
+
+  do i = 1, n_r
+     read(10, *) r_freq(i), r_obs(i)
+  end do
+
+  close(10)
+
+  open(unit=10, file='ratio_invcov.txt', status='old', iostat=ierr)
+  if (ierr /= 0) then
+     write(*,*) 'failed to open ratio_invcov.txt'
+     stop 1
+  end if
+
+  do i = 1, n_r
+     read(10, *) r_invcov(i,:)
+  end do
+
+  close(10)
+
+  ! Done loading ratio data
+
   ! Create a star
 
   ! id = create_star( &
@@ -216,6 +259,8 @@ program em_test
   print *,'l=2 results (n_pg, nu, E_norm):'
   call write_results(fr_cor(2))
 
+  print *,'complete results:'
+  print *,'              fr_obs                         fr_err               fr_mod                  fr_mod_E_norm               fr_cor'
   do i = 0, 2
      do j = 1, fr_obs(i)%n
         print *, fr_obs(i)%nu(j), fr_obs(i)%dnu(j), fr_mod(i)%nu(j), &
@@ -223,28 +268,36 @@ program em_test
      end do
   end do
 
-  allocate(fr(2))
-  fr(1) = 3000d0
-  fr(2) = 3150d0
-
-  allocate(ratios(size(fr)))
-  call get_r010(fr, fr_mod(0), fr_mod(1), ratios)
+  j = fr_obs(1)%n - 2
+  allocate(r_mod(j))
+  call get_r010(fr_obs(1)%nu(2:j+1), fr_mod(0), fr_mod(1), r_mod)
 
   write(*,*) 'r010 ratios'
-  do i = 1, size(ratios)
-     write(*,*) i, fr(i), ratios(i)
+  write(*,*) '          i               r_freq                           r010'
+  do i = 1, size(r_mod)
+     write(*,*) i, fr_obs(1)%nu(i+1), r_mod(i)
   end do
-  deallocate(ratios)
+  deallocate(r_mod)
 
+  j = fr_obs(2)%n - 2
+  allocate(r_mod(j))
+  call get_r02(fr_obs(2)%nu(2:j+1), fr_mod(0), fr_mod(1), fr_mod(2), r_mod)
+  
   write(*,*) 'r02 ratios'
-  allocate(ratios(size(fr)))
-  call get_r02(fr, fr_mod(0), fr_mod(1), fr_mod(2), ratios)
-  do i = 1, size(ratios)
-     write(*,*) i, fr(i), ratios(i)
+  write(*,*) '          i               r_freq                            r02'
+  do i = 1, size(r_mod)
+     write(*,*) i, fr_obs(2)%nu(i+1), r_mod(i)
   end do
-  deallocate(ratios)
+  deallocate(r_mod)
 
-  deallocate(fr)
+  ! Compute chi^2 for ratios
+
+  call chi2_ratios(n_r010, n_r02, n_r13, r_freq, r_obs, r_invcov, &
+       fr_mod, chi2)
+  write(*,*) "chi2_ratios =", chi2
+
+  deallocate(r_obs, r_invcov)
+  
   ! Finish
 
 contains
