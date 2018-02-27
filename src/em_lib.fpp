@@ -1271,7 +1271,9 @@ contains
          fr_mod(0), fr_mod(1), fr_mod(3), r_mod(n_r010+n_r02+1:n_r))
 
     chi2 = 0d0
+    ! write(*,*) '          i               r_freq                          r_mod                     r_obs'
     do i = 1, n_r
+       ! write(*,*) i, r_freq(i), r_mod(i), r_obs(i)
        do j = 1, n_r
           chi2 = chi2 + (r_mod(i)-r_obs(i))*r_invcov(i,j)*(r_mod(j)-r_obs(j))
        end do

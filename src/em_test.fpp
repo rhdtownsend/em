@@ -145,7 +145,7 @@ program em_test
   ! Read data and (inverse) covariance for ratios
   ! Produced externally with Python
   ! I should be better about IO units but let's first make something that works
-  n_r010 = 19
+  n_r010 = 20
   n_r02 = 11
   n_r13 = 0
   n_r = n_r010 + n_r02 + n_r13
@@ -279,9 +279,9 @@ program em_test
   end do
   deallocate(r_mod)
 
-  j = fr_obs(2)%n - 2
+  j = fr_obs(2)%n - 1
   allocate(r_mod(j))
-  call get_r02(fr_obs(2)%nu(2:j+1), fr_mod(0), fr_mod(1), fr_mod(2), r_mod)
+  call get_r02(fr_obs(0)%nu, fr_mod(0), fr_mod(1), fr_mod(2), r_mod)
   
   write(*,*) 'r02 ratios'
   write(*,*) '          i               r_freq                            r02'
