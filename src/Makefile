@@ -28,6 +28,10 @@ LDFLAGS:=${LDFLAGS} ${LOAD_MESA_STAR} -lz
 
 # Include other makefiles
 
-SUBDIRS=${GYRE_DIR}/src/extern/core:${GYRE_DIR}/src/extern/astro:${GYRE_DIR}/src/common:${GYRE_DIR}/src/diff:${GYRE_DIR}/src/bvp:${GYRE_DIR}/src/interp:${GYRE_DIR}/src/model:${GYRE_DIR}/src/matrix:${GYRE_DIR}/src/search:${GYRE_DIR}/src/ext:${GYRE_DIR}/src/frontend:${GYRE_DIR}/src/ad:${GYRE_DIR}/src/rad:${GYRE_DIR}/src/nad:${GYRE_DIR}/src/rot:${GYRE_DIR}/src/tar:${GYRE_DIR}/src/mode:${GYRE_DIR}/src/soln:${GYRE_DIR}/src/grid:${GYRE_DIR}/src/frontend:${GYRE_DIR}/src/output:${GYRE_DIR}/src/poly:${MESA_DIR}/star/job
+SUBDIRS_GYRE=extern/core:common:diff:bvp:interp:model:matrix:search:context:ext:frontend:ad:rad:nad:rot:tar:tide:mode:grid:frontend:output:poly
+
+SUBDIRS_MESA=${MESA_DIR}/star/job
+
+SUBDIRS=${GYRE_DIR}/src/$(subst :,:${GYRE_DIR}/src/,${SUBDIRS_GYRE})
 
 include Make.inc

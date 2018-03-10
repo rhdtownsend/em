@@ -267,13 +267,14 @@ contains
                      deps_scheme='MODEL', &
                      deps_file='', &
                      deps_file_format='', &
-                     complex_lambda=.FALSE., &
                      tag_list='', &
                      nonadiabatic=.FALSE., &
                      quasiad_eigfuncs=.FALSE., &
                      cowling_approx=.FALSE., &
-                     eddington_approx=.TRUE., &
                      narf_approx=.FALSE., &
+                     eddington_approx=.TRUE., &
+                     complex_lambda=.FALSE., &
+                     include_eps_grv=.FALSE., &
                      reduce_order=.TRUE.)
 
     ! Numerical
@@ -335,90 +336,101 @@ contains
     type(context_t), pointer, intent(out)   :: cx
     type(mode_t), allocatable, intent(out)  :: md(:)
 
-    type(grid_t)                :: gr
     real(dp), allocatable       :: omega(:)
+    type(grid_t)                :: gr
+    real(dp)                    :: omega_min
+    real(dp)                    :: omega_max
     class(r_bvp_t), allocatable :: bp
     integer                     :: n_md
     integer                     :: d_md
 
-    ! Create the scaffold grid (used in setting up the frequency array)
-
-    gr = grid_t(ml%grid(), gr_p%x_i, gr_p%x_o)
-
-    ! Set up the frequency array
-
-    call build_scan(ml, gr, md_p, os_p, sc_p, omega)
-
-    call check_scan(ml, gr, omega, md_p, os_p)
-
-    ! Create the full grid
-
-    gr = grid_t(ml, omega, gr_p, md_p, os_p)
-
-    if (gr%n_k > 25000) stop 'Done'
-
     ! Set up the context
 
     allocate(cx)
+    cx = context_t(ml, gr_p, md_p, os_p)
 
-    cx = context_t(ml, gr%pt_i(), gr%pt_o(), md_p, os_p)
+    ! Set up the frequency array
+
+    call build_scan(cx, md_p, os_p, sc_p, omega)
+
+    call check_scan(ml, gr, omega, md_p, os_p)
+
+    ! Create the grid
+
+    gr = grid_t(cx, omega, gr_p)
+
+    if (gr%n_k > 25000) stop 'Grid exceeded hard-wired size limit of 25,000 points'
+
+    ! Set frequency bounds and perform checks
+
+    if (nm_p%restrict_roots) then
+       omega_min = MINVAL(omega)
+       omega_max = MAXVAL(omega)
+    else
+       omega_min = -HUGE(0._dp)
+       omega_max = HUGE(0._dp)
+    endif
+
+    call check_scan(ml, gr, omega, md_p, os_p)
 
     ! Create the bvp_t
 
-     if (md_p%l == 0 .AND. os_p%reduce_order) then
-        allocate(bp, SOURCE=rad_bvp_t(cx, gr, md_p, nm_p, os_p))
-     else
-        allocate(bp, SOURCE=ad_bvp_t(cx, gr, md_p, nm_p, os_p))
-     endif
+    if (md_p%l == 0 .AND. os_p%reduce_order) then
+       allocate(bp, SOURCE=rad_bvp_t(cx, gr, md_p, nm_p, os_p))
+    else
+       allocate(bp, SOURCE=ad_bvp_t(cx, gr, md_p, nm_p, os_p))
+    endif
 
-     ! Find modes
+    ! Find modes
 
-     n_md = 0
-     d_md = 16
+    n_md = 0
+    d_md = 16
 
-     allocate(md(d_md))
-     
-     call scan_search(bp, omega, MINVAL(omega), MAXVAL(omega), process_mode, nm_p)
+    allocate(md(d_md))
 
-     ! Resize the md array just to the modes found
+    call scan_search(bp, omega, omega_min, omega_max, process_mode, nm_p)
 
-     md = md(:n_md)
+    ! Resize the md array just to the modes found
 
-     ! Finish
+    md = md(:n_md)
 
-     return
+    ! Finish
 
-   contains
+    deallocate(cx)
 
-     subroutine process_mode (md_new, n_iter, chi)
+    return
 
-       type(mode_t), intent(in)  :: md_new
-       integer, intent(in)       :: n_iter
-       type(r_ext_t), intent(in) :: chi
+  contains
 
-       ! Process the mode
+    subroutine process_mode (md_new, n_iter, chi)
 
-       if (md_new%n_pg < md_p%n_pg_min .OR. md_new%n_pg > md_p%n_pg_max) return
+      type(mode_t), intent(in)  :: md_new
+      integer, intent(in)       :: n_iter
+      type(r_ext_t), intent(in) :: chi
 
-       ! Store it
+      ! Process the mode
 
-       n_md = n_md + 1
+      if (md_new%n_pg < md_p%n_pg_min .OR. md_new%n_pg > md_p%n_pg_max) return
 
-       if (n_md > d_md) then
-          d_md = 2*d_md
-          call reallocate(md, [d_md])
-       endif
+      ! Store it
 
-       md(n_md) = md_new
+      n_md = n_md + 1
 
-       !call md(n_md)%prune()
+      if (n_md > d_md) then
+         d_md = 2*d_md
+         call reallocate(md, [d_md])
+      endif
 
-       ! Finish
+      md(n_md) = md_new
 
-       return
+      !call md(n_md)%prune()
 
-     end subroutine process_mode
+      ! Finish
 
-   end subroutine find_gyre_modes
+      return
+
+    end subroutine process_mode
+
+  end subroutine find_gyre_modes
 
 end module em_gyre
