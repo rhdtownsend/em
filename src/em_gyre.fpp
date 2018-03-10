@@ -274,7 +274,6 @@ contains
                      narf_approx=.FALSE., &
                      eddington_approx=.TRUE., &
                      complex_lambda=.FALSE., &
-                     include_eps_grv=.FALSE., &
                      reduce_order=.TRUE.)
 
     ! Numerical
