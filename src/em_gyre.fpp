@@ -352,8 +352,6 @@ contains
 
     call build_scan(cx, md_p, os_p, sc_p, omega)
 
-    call check_scan(ml, gr, omega, md_p, os_p)
-
     ! Create the grid
 
     gr = grid_t(cx, omega, gr_p)
@@ -394,8 +392,6 @@ contains
     md = md(:n_md)
 
     ! Finish
-
-    deallocate(cx)
 
     return
 
