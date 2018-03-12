@@ -1,6 +1,6 @@
 # Variables
 
-TARGETS=em_test ff_amp2.o
+TARGETS=em_test em_test_warrick ff_amp2.o
 
 DEBUG=no
 
