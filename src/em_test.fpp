@@ -34,6 +34,10 @@ program em_test
   real(dp)     :: L
   real(dp)     :: age
 
+  ! Initialize EM
+
+  call init_em()
+
   ! Define observational frequencies
 
   fr_obs_0 = freq_t([799.70d0,855.30d0,909.92d0,965.16d0,1021.81d0,1078.97d0,1135.32d0,1192.12d0,1250.12d0], &
@@ -97,6 +101,14 @@ program em_test
 
   print *,'l=2 results (n_pg, nu, E_norm):'
   call write_results(fr_mod_2)
+
+  ! Destroy the star
+
+  call destroy_star(id)
+
+  ! Finalize EM
+
+  call final_em()
 
   ! Finish
 
