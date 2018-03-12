@@ -19,12 +19,14 @@ program em_test
 
   ! Variables
 
+  type(freq_t) :: fr_obs_0
+  type(freq_t) :: fr_obs_1
+  type(freq_t) :: fr_obs_2
   integer      :: id
-  type(freq_t) :: fr_obs(0:3)
-  type(freq_t) :: fr_mod(0:3)
-  type(freq_t) :: fr_cor(0:3)
+  type(freq_t) :: fr_mod_0
+  type(freq_t) :: fr_mod_1
+  type(freq_t) :: fr_mod_2
   integer      :: i
-  integer      :: j
   real(dp)     :: Teff
   real(dp)     :: logg
   real(dp)     :: FeH
@@ -32,66 +34,27 @@ program em_test
   real(dp)     :: L
   real(dp)     :: age
 
-  real(dp), allocatable :: r_mod(:)
-  real(dp), allocatable :: r_freq(:)
-  real(dp), allocatable :: r_obs(:)
-  real(dp), allocatable :: r_invcov(:,:)
-  integer :: n_r, n_r010, n_r02, n_r13, ierr
-  real(dp) :: chi2
-
   ! Define observational frequencies
 
-  fr_obs = freq_t()
-  ! Rich's original data
-  fr_obs(0) = freq_t([799.70d0,855.30d0,909.92d0,965.16d0,1021.81d0,1078.97d0,1135.32d0,1192.12d0,1250.12d0], &
+  fr_obs_0 = freq_t([799.70d0,855.30d0,909.92d0,965.16d0,1021.81d0,1078.97d0,1135.32d0,1192.12d0,1250.12d0], &
                     [0.27d0,0.73d0,0.26d0,0.36d0,0.28d0,0.33d0,0.34d0,0.45d0,0.89d0], &
                     [1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0], &
                     [1,2,3,4,5,6,7,8,9])
 
-  fr_obs(1) = freq_t([748.60d0,777.91d0,828.21d0,881.29d0,935.90d0,991.09d0,1047.79d0,1104.68d0,1161.27d0,1216.95d0], &
+  fr_obs_1 = freq_t([748.60d0,777.91d0,828.21d0,881.29d0,935.90d0,991.09d0,1047.79d0,1104.68d0,1161.27d0,1216.95d0], &
                     [0.23d0,0.24d0,0.42d0,0.29d0,0.23d0,0.22d0,0.24d0,0.22d0,0.33d0,0.53d0], &
                     [1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0], &
                     [1,2,3,4,5,6,7,8,9,10])
 
-  fr_obs(2) = freq_t([794.55d0,905.31d0,961.47d0,1017.56d0,1075.01d0,1130.79d0,1187.55d0,1246.78d0], &
+  fr_obs_2 = freq_t([794.55d0,905.31d0,961.47d0,1017.56d0,1075.01d0,1130.79d0,1187.55d0,1246.78d0], &
                     [0.52d0,0.35d0,0.49d0,0.27d0,0.27d0,0.61d0,0.32d0,0.84d0], &
                     [1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0,1.d0], &
                     [1,2,3,4,5,6,7,8])
-
-  ! Travis' Sun-like data
-  ! fr_obs(0) = freq_t([2093.53d0, 2228.95d0, 2363.03d0, 2496.29d0, 2629.84d0, 2764.32d0, 2899.11d0, &
-  !                    3033.92d0, 3168.94d0, 3303.73d0, 3439.17d0, 3575.23d0, 3711.6d0, 3848.2d0, 3984.79d0], &
-  !                   [0.14d0, 0.1d0, 0.07d0, 0.07d0, 0.06d0, 0.05d0, 0.04d0, 0.04d0, &
-  !                    0.05d0, 0.06d0, 0.1d0, 0.15d0, 0.26d0, 0.5d0, 0.65d0], &
-  !                   [1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, &
-  !                    1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0], &
-  !                   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
   
-  ! fr_obs(1) = freq_t([2156.91d0, 2292.05d0, 2425.82d0, 2559.31d0, 2693.56d0, 2828.36d0, 2963.45d0, &
-  !                    3098.39d0, 3233.4d0, 3368.88d0, 3504.5d0, 3640.95d0, 3777.21d0, 3913.93d0, 4051.51d0], &
-  !                   [0.08d0, 0.09d0, 0.09d0, 0.06d0, 0.06d0, 0.05d0, 0.05d0, 0.05d0, &
-  !                    0.05d0, 0.08d0, 0.09d0, 0.16d0, 0.2d0, 0.36d0, 0.61d0], &
-  !                   [1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, &
-  !                    1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0], &
-  !                   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-
-  ! fr_obs(2) = freq_t([2082.35d0, 2217.71d0, 2352.32d0, 2486.11d0, 2619.87d0, 2754.72d0, 2889.66d0, &
-  !                    3024.81d0, 3160.05d0, 3295.05d0, 3430.88d0, 3566.95d0, 3703.7d0, 3840.9d0, 3977.52d0], &
-  !                   [0.55d0, 0.26d0, 0.14d0, 0.13d0, 0.08d0, 0.07d0, 0.06d0, 0.07d0, &
-  !                    0.07d0, 0.09d0, 0.14d0, 0.24d0, 0.32d0, 0.64d0, 0.87d0], &
-  !                   [1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, &
-  !                    1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0], &
-  !                   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-
-  ! fr_obs(3) = freq_t([2541.91d0, 2676.26d0, 2811.32d0, 2947.1d0, 3082.24d0, 3218.03d0, 3352.91d0, 3489.33d0, 3625.71d0], &
-  !      [0.53d0, 0.41d0, 0.3d0, 0.16d0, 0.26d0, 0.16d0, 0.34d0, 0.43d0, 0.64d0], &
-  !      [1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0, 1.d0], &
-  !      [1, 2, 3, 4, 5, 6, 7, 8, 9])
-
-  call set_obs_freqs(0, fr_obs(0))
-  call set_obs_freqs(1, fr_obs(1))
-  call set_obs_freqs(2, fr_obs(2))
-
+  call set_obs_freqs(0, fr_obs_0)
+  call set_obs_freqs(1, fr_obs_1)
+  call set_obs_freqs(2, fr_obs_2)
+  
   ! Create a star
 
   id = create_star( &
@@ -122,19 +85,18 @@ program em_test
 
   ! Get model frequencies
 
-  fr_mod = freq_t()
-  fr_mod(0) = get_mod_freqs(0)
-  fr_mod(1) = get_mod_freqs(1)
-  fr_mod(2) = get_mod_freqs(2)
+  fr_mod_0 = get_mod_freqs(0)
+  fr_mod_1 = get_mod_freqs(1)
+  fr_mod_2 = get_mod_freqs(2)
 
   print *,'l=0 results (n_pg, nu, E_norm):'
-  call write_results(fr_mod(0))
+  call write_results(fr_mod_0)
 
   print *,'l=1 results (n_pg, nu, E_norm):'
-  call write_results(fr_mod(1))
+  call write_results(fr_mod_1)
 
   print *,'l=2 results (n_pg, nu, E_norm):'
-  call write_results(fr_mod(2))
+  call write_results(fr_mod_2)
 
   ! Finish
 
@@ -157,3 +119,4 @@ contains
   end subroutine write_results
 
 end program em_test
+
