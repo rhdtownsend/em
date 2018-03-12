@@ -826,7 +826,7 @@ contains
     type(freq_t), intent(in)  :: fr_obs(0:3)
     type(freq_t), intent(out) :: fr_cor(0:3)
     real(dp) :: X, y, XtX, Xty
-    integer :: i, j, l
+    integer :: i, l
 
     call match_modes(fr_mod, fr_obs, fr_cor)
 
@@ -867,7 +867,7 @@ contains
     type(freq_t) :: fr_obs(0:3)
     type(freq_t) :: fr_cor(0:3)
     real(dp) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
-    integer :: i, j, l
+    integer :: i, l
 
     call match_modes(fr_mod, fr_obs, fr_cor)
 
@@ -942,9 +942,6 @@ contains
 
     integer, intent(in)      :: l
     type(freq_t), intent(in) :: fr
-
-    integer :: n
-    integer :: i
 
     ! Set observational frequency data for harmonic degree l
 
