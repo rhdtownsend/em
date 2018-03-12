@@ -391,7 +391,10 @@ contains
 
     md = md(:n_md)
 
-    ! Finish
+    ! Finish (this explicit deallocation shouldn't be necessary, but
+    ! without it valgrind complains)
+
+    deallocate(bp)
 
     return
 
