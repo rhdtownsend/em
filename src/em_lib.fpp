@@ -62,7 +62,8 @@ module em_lib
 
   public :: dp
   public :: freq_t
-  public :: init
+  public :: init_em
+  public :: final_em
   public :: create_star
   public :: evolve_star_to_zams
   public :: evolve_star_to_log_g
@@ -82,7 +83,7 @@ module em_lib
 
 contains
 
-  subroutine init ()
+  subroutine init_em ()
 
     ! Initialize
 
@@ -92,9 +93,23 @@ contains
 
     return
 
-  end subroutine init
+  end subroutine init_em
 
-  !*****
+  !****
+
+  subroutine final_em ()
+
+    ! Finalize
+
+    call starlib_shutdown()
+
+    ! Finish
+
+    return
+
+  end subroutine final_em
+
+  !****
 
   function create_star (M, Y, Z, alpha, f_ov) result (id)
 
