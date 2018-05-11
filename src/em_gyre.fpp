@@ -226,81 +226,34 @@ contains
 
     ! Model
 
-    ml_p = model_par_t(Gamma_1=5._dp/3._dp, &
-                       Omega_rot=0._dp, &
-                       dx_snap=0._dp, &
-                       x_i=0._dp, &
-                       x_o=1._dp, &
-                       s=1._dp, &
-                       model_type='', &
-                       grid_type='UNIFORM', &
-                       file_format='', &
-                       data_format='', &
-                       deriv_type='MONO', &
-                       Omega_units='NONE', &
-                       file='', &
-                       n=10, &
-                       add_center=.FALSE., &
-                       repair_As=.TRUE., &
-                       uniform_rot=.FALSE.)
+    ml_p = model_par_t(add_center=.FALSE., &
+                       repair_As=.TRUE.)
 
     ! Mode
 
     md_p = mode_par_t(i=1, &
                       l=l, &
-                      m=0, &
-                      n_pg_min=-HUGE(0), &
-                      n_pg_max=HUGE(0), &
-                      rossby=.FALSE., &
-                      tag='')
+                      m=0)
 
     ! Oscillation
 
     os_p = osc_par_t(x_ref=1._dp, &
-                     rotation_method='DOPPLER', &
-                     variables_set='GYRE', &
-                     inner_bound='REGULAR', &
                      outer_bound='JCD', &
                      inertia_norm='RADIAL', &
-                     time_factor='OSC', &
-                     conv_scheme='FROZEN_PESNELL_1', &
-                     deps_scheme='MODEL', &
-                     deps_file='', &
-                     deps_file_format='', &
-                     tag_list='', &
-                     nonadiabatic=.FALSE., &
-                     quasiad_eigfuncs=.FALSE., &
-                     cowling_approx=.FALSE., &
-                     narf_approx=.FALSE., &
-                     eddington_approx=.TRUE., &
-                     complex_lambda=.FALSE., &
-                     reduce_order=.TRUE.)
+                     eddington_approx=.TRUE.)
 
     ! Numerical
 
-    nm_p = num_par_t(n_iter_max=50, &
-                     deflate_roots=.TRUE., &
-                     restrict_roots=.TRUE., &
-                     diff_scheme='COLLOC_GL4', &
-                     r_root_solver='BRENT', &
-                     c_root_solver='RIDDERS', &
-                     matrix_type='BLOCK', &
-                     tag_list='')
+    nm_p = num_par_t(diff_scheme='COLLOC_GL4')
 
-    ! Grid
+    ! Grid (the first setting is preferable, but can lead to huge
+    ! models. So, go with the second one for now)
 
-    gr_p = grid_par_t(x_i=-HUGE(0._dp), &
-                      x_o=HUGE(0._dp), &
-!                      alpha_osc=10._dp, &
+!    gr_p = grid_par_t(alpha_osc=10._dp, &
 !                      alpha_exp=2._dp, &
-                      alpha_osc=0._dp, &
-                      alpha_exp=0._dp, &
-                      alpha_thm=0._dp, &
-                      alpha_str=0._dp, &
-                      dx_min=SQRT(EPSILON(0._dp)), &
-                      n_inner=5, &
-                      n_iter_max=0, &
-                      tag_list='')
+!                      n_inner=5)
+
+    gr_p = grid_par_t(n_inner=5)
 
     ! Scan
 
@@ -313,8 +266,7 @@ contains
                          freq_max_units=freq_units, &
                          freq_frame='INERTIAL', &
                          grid_type='LINEAR', &
-                         grid_frame='INERTIAL', &
-                         tag_list='')
+                         grid_frame='INERTIAL')
 
     ! Finish
 
