@@ -18,7 +18,7 @@ LOAD_CRLIBM = -lcrlibm
 LOAD_MATRIX = -lf2crlibm $(LOAD_CRLIBM) -lmtx -lconst -lutils $(LOAD_LAPACK) $(LOAD_BLAS)
 LOAD_MESA_NUMERICS = -linterp_2d -linterp_1d -lnum $(LOAD_MATRIX) $(LOAD_HDF5)
 LOAD_MESA_MICRO = -lnet -leos -lkap -lrates -lneu -lchem $(LOAD_MESA_NUMERICS)
-LOAD_MESA_MACRO = -lionization -latm -lcolors -lmlt $(LOAD_MESA_MICRO)
+LOAD_MESA_MACRO = -lionization -latm -lcolors $(LOAD_MESA_MICRO)
 LOAD_MESA_STAR_SUPPORT = $(LOAD_MESA_MACRO)
 LOAD_STAR_MODS = -lstar $(LOAD_MESA_STAR_SUPPORT)
 STAR_LOAD_LIST = $(LOAD_STAR_MODS) $(LOAD_PGPLOT) $(LOAD_SE)
@@ -28,7 +28,7 @@ LDFLAGS:=${LDFLAGS} ${LOAD_MESA_STAR} -lz
 
 # Include other makefiles
 
-SUBDIRS_GYRE=extern/core:common:diff:bvp:interp:model:matrix:search:context:ext:frontend:ad:rad:nad:rot:tar:tide:mode:grid:frontend:output:poly
+SUBDIRS_GYRE=extern/core:common:par:diff:bvp:interp:model:matrix:search:context:ext:frontend:ad:rad:nad:rot:tar:tide:mode:grid:frontend:output:poly
 
 SUBDIRS_MESA=${MESA_DIR}/star/job
 
