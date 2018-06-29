@@ -23,6 +23,7 @@ program em_test
   type(freq_t) :: fr_obs_1
   type(freq_t) :: fr_obs_2
   integer      :: id
+  integer      :: t_code
   type(freq_t) :: fr_mod_0
   type(freq_t) :: fr_mod_1
   type(freq_t) :: fr_mod_2
@@ -66,15 +67,32 @@ program em_test
        Y=0.28D0, &
        Z=0.02D0, &
        alpha=1.6295047446620596D+00, &
-       f_ov=1.4999999999999999D-02)
+       f_ov=1.4999999999999999D-02, &
+       max_age=1D11)
 
   ! Evolve it to the ZAMS
 
-  call evolve_star_to_zams(id)
+  call evolve_star_to_zams(id, t_code)
+
+  if (t_code == t_ok) then
+     print *,'Evolve to ZAMS: OK'
+  else
+     print *,'Evolve to ZAMS: Failed, termination code =', t_code
+     stop
+  end if
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id)
+  call evolve_star_seismic(id, t_code)
+
+  if (t_code == t_ok) then
+     print *,'Evolve to seismic: OK'
+  elseif (t_code == t_max_age) then
+     print *,'Evolve to seismic: Reached maximum age'
+  else
+     print *,'Evolve to seismic: Failed, termination code =', t_code
+     stop
+  endif
 
   ! Get model data
 

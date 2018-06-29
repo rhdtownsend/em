@@ -20,6 +20,7 @@ program em_test
   ! Variables
 
   integer      :: id
+  integer      :: t_code
   type(freq_t) :: fr_obs(0:3)
   type(freq_t) :: fr_mod(0:3)
   type(freq_t) :: fr_cor(0:3)
@@ -194,15 +195,16 @@ program em_test
        Z=0.017d0, &
        Y=0.265d0, &
        alpha=2.0d0, &
-       f_ov=0.0d0)
+       f_ov=0.0d0, &
+       max_age=1D11)
 
   ! Evolve it to the ZAMS
 
-  call evolve_star_to_zams(id)
+  call evolve_star_to_zams(id, t_code)
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id)
+  call evolve_star_seismic(id, t_code)
 
   ! Get model data
 

@@ -1,7 +1,7 @@
 ! Module   : em_lib
 ! Purpose  : main Embedded MESA module
 !
-! Copyright 2016 Rich Townsend
+! Copyright 2016-2018 Rich Townsend
 
 $include 'core.inc'
 
@@ -27,6 +27,10 @@ module em_lib
   ! No implicit typing
 
   implicit none
+
+  ! Parameter definitions
+
+  integer, parameter :: t_ok = 0
 
   ! Module variables
 
@@ -81,6 +85,9 @@ module em_lib
   public :: get_r13
   public :: chi2_ratios
 
+  public :: t_ok
+  public :: t_max_age
+
 contains
 
   subroutine init_em ()
@@ -111,13 +118,14 @@ contains
 
   !****
 
-  function create_star (M, Y, Z, alpha, f_ov) result (id)
+  function create_star (M, Y, Z, alpha, f_ov, max_age) result (id)
 
     real(dp), intent(in) :: M
     real(dp), intent(in) :: Y
     real(dp), intent(in) :: Z
     real(dp), intent(in) :: alpha
     real(dp), intent(in) :: f_ov
+    real(dp), intent(in) :: max_age
     integer              :: id
 
     integer                  :: ierr
@@ -154,7 +162,6 @@ contains
 
     ! Set up controls (by passing an empty filename, no inlist will be
     ! read, but defaults are set)
-
     call star_setup(id, '', ierr)
     $ASSERT(ierr == 0,Failed in star_steup)
 
@@ -162,12 +169,14 @@ contains
     s%initial_y = Y
     s%initial_Z = Z
     s%mixing_length_alpha = alpha
-    s%max_age = 15.d9
+    s%max_age = max_age
 
     s%num_cells_for_smooth_brunt_B = 0
     s%add_double_points_to_pulse_data = .TRUE.
     s%threshold_grad_mu_for_double_point = 1d0
     s%max_number_of_double_points = 100
+
+    s%do_element_diffusion = .TRUE.
 
 !    s%varcontrol_target = 1D-4
 !    s%mesh_delta_coeff = 0.5D0
@@ -254,9 +263,10 @@ contains
 
   !****
 
-  subroutine evolve_star (id)
+  subroutine evolve_star (id, t_code)
 
-    integer, intent(in) :: id
+    integer, intent(in)  :: id
+    integer, intent(out) :: t_code
 
     logical, parameter :: DEBUG = .FALSE.
 
@@ -294,7 +304,7 @@ contains
           if (result == keep_going) exit step_loop
 
           ! See what went wrong
-               
+
           if (result == redo) then
              result = star_prepare_to_redo(id)
           end if
@@ -335,6 +345,10 @@ contains
 
     end do evolve_loop
 
+    ! Set up the termination code
+
+    t_code = s%termination_code
+
     ! Finish
 
     return
@@ -343,9 +357,10 @@ contains
 
   !****
   
-  subroutine evolve_star_to_zams (id)
+  subroutine evolve_star_to_zams (id, t_code)
 
-    integer, intent(in) :: id
+    integer, intent(in)  :: id
+    integer, intent(out) :: t_code
 
     type(star_info), pointer :: s
     integer                  :: ierr
@@ -363,7 +378,9 @@ contains
 
     ! Evolve the star
 
-    call evolve_star(id)
+    call evolve_star(id, t_code)
+
+    if (t_code == t_Lnuc_div_L_zams_limit) t_code = t_ok
 
     ! Reset controls
 
@@ -377,10 +394,11 @@ contains
 
   !****
 
-  subroutine evolve_star_to_log_g (id, log_g)
+  subroutine evolve_star_to_log_g (id, log_g, t_code)
 
     integer, intent(in)  :: id
     real(dp), intent(in) :: log_g
+    integer, intent(out) :: t_code
 
     type(star_info), pointer :: s
     integer                  :: ierr
@@ -398,7 +416,9 @@ contains
 
     ! Evolve
 
-    call evolve_star(id)
+    call evolve_star(id, t_code)
+
+    if (t_code == t_log_g_lower_limit) t_code = t_ok
 
     ! Reset controls
 
@@ -412,9 +432,10 @@ contains
 
   !****
 
-  subroutine evolve_star_seismic (id, f_enter, f_exit, y_tol, dt_frac)
+  subroutine evolve_star_seismic (id, t_code, f_enter, f_exit, y_tol, dt_frac)
 
     integer, intent(in)            :: id
+    integer, intent(out)           :: t_code
     real(dp), intent(in), optional :: f_enter
     real(dp), intent(in), optional :: f_exit
     real(dp), intent(in), optional :: y_tol
@@ -471,7 +492,9 @@ contains
 
     ! Evolve the star
 
-    call evolve_star(id)
+    call evolve_star(id, t_code)
+
+    if (t_code == t_extras_check_model) t_code = t_ok
 
     ! Reset controls
 
@@ -544,10 +567,8 @@ contains
        return
     endif
 
-    ! call clear_mod_freqs_
-    ! call clear_cor_freqs_
-    fr_mod = freq_t()
-    fr_cor = freq_t()
+    call clear_mod_freqs_()
+    call clear_cor_freqs_()
     
     ! Run GYRE for radial modes
 
@@ -774,6 +795,10 @@ contains
 
     y_prev = y
 
+    ! If necessary, set the termination code
+
+    if (action == terminate) s%termination_code = t_extras_check_model
+       
     ! Finish
 
     return
