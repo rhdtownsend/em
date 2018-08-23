@@ -200,6 +200,8 @@ contains
 
       call ml%define(I_OMEGA_ROT, Omega_rot)
 
+      call ml%commit()
+
     end associate
 
     ! Finish
