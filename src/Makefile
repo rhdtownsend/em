@@ -1,8 +1,8 @@
 # Variables
 
-TARGETS=em_test em_test_warrick ff_amp2.o
+TARGETS=em_test em_test_warrick testffamp2
 
-DEBUG=no
+DEBUG=yes
 
 # MESA stuff
 
@@ -35,3 +35,7 @@ SUBDIRS_MESA=${MESA_DIR}/star/job
 SUBDIRS=${GYRE_DIR}/src/$(subst :,:${GYRE_DIR}/src/,${SUBDIRS_GYRE})
 
 include Make.inc
+
+# Additional deps
+
+testffamp2: ff_amp2.o
