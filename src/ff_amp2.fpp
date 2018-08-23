@@ -76,9 +76,17 @@ real function userff (npar, data, myid)
   type(freq_t) :: fr_mod(0:3)
   type(freq_t) :: fr_cor(0:3)
 
+  ! Initialize EM
+
+  call init_em()
+
   ! First pass to set array sizes
 
   open(unit=100, file='obs.dat', status='old', action='read')
+  l0=0
+  l1=0
+  l2=0
+  l3=0
   read(100,*) n
   do i=1,n
      read(100,*) ll
@@ -114,7 +122,6 @@ real function userff (npar, data, myid)
   ! Read observational constraints
 
   open(unit=100, file='obs.dat', status='old', action='read')
-  read(100,*) n
   l0=0
   l1=0
   l2=0
@@ -124,6 +131,7 @@ real function userff (npar, data, myid)
   spec(3)=0
   spec(4)=0
   spec(5)=0
+  read(100,*) n
   do i=1,n+ns
      ll=-1
      read(100,*) lchr,f,e
@@ -189,27 +197,55 @@ real function userff (npar, data, myid)
   call set_obs_freqs(2, fr_obs(2))
   call set_obs_freqs(3, fr_obs(3))
 
+  !print *,'read obs.dat'
+  !print *,'l=0 obs:', [(fr_obs(0)%nu(i),i=1,fr_obs(0)%n)]
+  !print *,'l=1 obs:', [(fr_obs(1)%nu(i),i=1,fr_obs(1)%n)]
+  !print *,'l=2 obs:', [(fr_obs(2)%nu(i),i=1,fr_obs(2)%n)]
+  !print *,'l=3 obs:', [(fr_obs(3)%nu(i),i=1,fr_obs(3)%n)]
+  !print *,'other obs:',Teff_o,logg_o,FeH_o,R_o,L_o
+
   ! Create a star
 
-  M_mod = data(1)+0.75
+  ! full range
+  M_mod = 1.0*data(1)+0.75
   Z_mod = 10.**(1.4*data(2)-2.7)
   Y_mod = 0.10*data(3)+0.22
   alpha_mod = 2.0*data(4)+1.0
 
+  ! around solar
+  !M_mod = 0.2*data(1)+0.90
+  !Z_mod = 10.**(0.3*data(2)-1.9)
+  !Y_mod = 0.04*data(3)+0.24
+  !alpha_mod = 1.0*data(4)+1.5
+
+  ! close to solar
+  !M_mod = 0.02*data(1)+0.99
+  !Z_mod = 10.**(0.1*data(2)-1.8)
+  !Y_mod = 0.01*data(3)+0.26
+  !alpha_mod = 0.2*data(4)+1.9
+
+  ! solar-like model
+  !M_mod = 1.0d0
+  !Z_mod = 0.0173d0
+  !Y_mod = 0.265d0
+  !alpha_mod = 2.0d0
+
+  !print *,'M,Z,Y,alpha:',M_mod,Z_mod,Y_mod,alpha_mod
+
   id = create_star( &
        M = M_mod, &
-       Z = Z_mod, &
        Y = Y_mod, &
+       Z = Z_mod, &
        alpha = alpha_mod, &
        f_ov=0.0d0, &
-       max_age=1D11)
+       max_age=1.5d10)
 
   ! Evolve it to the ZAMS
 
   call evolve_star_to_zams(id, t_code)
 
   if (t_code == t_ok) then
-     print *,'Evolve to ZAMS: OK'
+     !print *,'Evolve to ZAMS: OK'
   else
      print *,'Evolve to ZAMS: Failed, termination code =', t_code
      stop
@@ -219,7 +255,6 @@ real function userff (npar, data, myid)
 
   print *,' calling evolve_star_seismic'
   call evolve_star_seismic(id, t_code)
-  print *,' done'
 
   if (t_code == t_ok) then
      print *,'Evolve to seismic: OK'
@@ -238,8 +273,16 @@ real function userff (npar, data, myid)
 
      call get_mod_data(Teff, logg, FeH, R, L, age)
 
+     !print *,'Teff: ',Teff
+     !print *,'logg: ',logg
+     !print *,' FeH: ',FeH
+     !print *,'R/Ro: ',R
+     !print *,'L/Lo: ',L
+     !print *,' age: ',age
+
      ! Calculate spectroscopic chisq
 
+     chisq_r=0.d0
      if (spec(1).eq.1) chisq_r = chisq_r + (Teff_o-Teff)*(Teff_o-Teff)/(Teff_e*Teff_e)
      if (spec(2).eq.1) chisq_r = chisq_r + (logg_o-logg)*(logg_o-logg)/(logg_e*logg_e)
      if (spec(3).eq.1) chisq_r = chisq_r + (FeH_o-FeH)*(FeH_o-FeH)/(FeH_e*FeH_e)
@@ -270,9 +313,37 @@ real function userff (npar, data, myid)
   
      userff = float(n+ns-5)/chisq_r
 
+  else
+
+     userff = 0.d0
+
   end if
 
   ! Finish
 
-end function userff
+  deallocate ( nl0 )
+  deallocate ( nl1 )
+  deallocate ( nl2 )
+  deallocate ( nl3 )
+  deallocate ( nu0 )
+  deallocate ( nu1 )
+  deallocate ( nu2 )
+  deallocate ( nu3 )
+  deallocate ( dnu0 )
+  deallocate ( dnu1 )
+  deallocate ( dnu2 )
+  deallocate ( dnu3 )
+  deallocate ( Enorm0 )
+  deallocate ( Enorm1 )
+  deallocate ( Enorm2 )
+  deallocate ( Enorm3 )
 
+  ! Destroy the star
+
+  call destroy_star(id)
+
+  ! Finalize EM
+
+  call final_em()
+
+end function userff
