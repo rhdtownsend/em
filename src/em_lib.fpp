@@ -473,6 +473,7 @@ contains
 
     ! Clear fit data
 
+    call clear_cor_freqs_()
     call clear_mod_freqs_()
     call clear_mod_data_()
     
@@ -567,8 +568,8 @@ contains
        return
     endif
 
-    call clear_mod_freqs_()
-    call clear_cor_freqs_()
+    ! call clear_mod_freqs_()
+    ! call clear_cor_freqs_()
     
     ! Run GYRE for radial modes
 
