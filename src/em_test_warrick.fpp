@@ -1,7 +1,7 @@
-! Module   : em_test
+! Module   : em_test_warrick
 ! Purpose  : test frontend for Embedded MESA
 !
-! Copyright 2016-2017 Rich Townsend
+! Copyright 2016-2018 Rich Townsend
 
 $include 'core.inc'
 
@@ -202,9 +202,25 @@ program em_test
 
   call evolve_star_to_zams(id, t_code)
 
+  if (t_code == t_ok) then
+     print *,'Evolve to ZAMS: OK'
+  else
+     print *,'Evolve to ZAMS: Failed, termination code =', t_code
+     stop
+  end if
+
   ! Evolve it until seismic constraints are met
 
   call evolve_star_seismic(id, t_code)
+
+  if (t_code == t_ok) then
+     print *,'Evolve to seismic: OK'
+  elseif (t_code == t_max_age) then
+     print *,'Evolve to seismic: Reached maximum age'
+  else
+     print *,'Evolve to seismic: Failed, termination code =', t_code
+     stop
+  endif
 
   ! Get model data
 
