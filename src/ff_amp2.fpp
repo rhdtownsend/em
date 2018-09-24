@@ -207,22 +207,22 @@ real function userff (npar, data, myid)
   ! Create a star
 
   ! full range
-  M_mod = 1.0*data(1)+0.75
-  Z_mod = 10.**(1.4*data(2)-2.7)
-  Y_mod = 0.10*data(3)+0.22
-  alpha_mod = 2.0*data(4)+1.0
+  !M_mod = 1.0*data(1)+0.75
+  !Z_mod = 10.**(1.4*data(2)-2.7)
+  !Y_mod = 0.10*data(3)+0.22
+  !alpha_mod = 2.0*data(4)+1.0
 
   ! around solar
-  !M_mod = 0.2*data(1)+0.90
-  !Z_mod = 10.**(0.3*data(2)-1.9)
-  !Y_mod = 0.04*data(3)+0.24
+  M_mod = 0.1*data(1)+0.95
+  !Z_mod = 10.**(0.1*data(2)-1.8)
+  !Y_mod = 0.02*data(3)+0.26
   !alpha_mod = 1.0*data(4)+1.5
 
   ! close to solar
-  !M_mod = 0.02*data(1)+0.99
-  !Z_mod = 10.**(0.1*data(2)-1.8)
-  !Y_mod = 0.01*data(3)+0.26
-  !alpha_mod = 0.2*data(4)+1.9
+  !M_mod = 0.05*data(1)+0.98
+  Z_mod = 10.**(0.1*data(2)-1.8)
+  Y_mod = 0.02*data(3)+0.26
+  alpha_mod = 0.5*data(4)+1.8
 
   ! solar-like model
   !M_mod = 1.0d0
@@ -253,16 +253,16 @@ real function userff (npar, data, myid)
 
   ! Evolve it until seismic constraints are met
 
-  print *,' calling evolve_star_seismic'
+  !print *,' calling evolve_star_seismic'
   call evolve_star_seismic(id, t_code)
 
   if (t_code == t_ok) then
-     print *,'Evolve to seismic: OK'
+     !print *,'Evolve to seismic: OK'
   elseif (t_code == t_max_age) then
      print *,'Evolve to seismic: Reached maximum age'
   else
      print *,'Evolve to seismic: Failed, termination code =', t_code
-     stop
+     !stop
   endif
 
   ! Analyze results if the seismic run went OK
