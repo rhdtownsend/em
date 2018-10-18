@@ -177,6 +177,7 @@ contains
     s%max_number_of_double_points = 100
 
     s%do_element_diffusion = .TRUE.
+    s%T_mix_limit = 1d4
 
 !    s%varcontrol_target = 1D-4
 !    s%mesh_delta_coeff = 0.5D0
