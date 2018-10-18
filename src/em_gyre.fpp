@@ -82,8 +82,8 @@ contains
 
     ! Set frequency bounds
 
-    freq_min = fr_obs%nu(1) - 0.5_dp*s%delta_nu
-    freq_max = fr_obs%nu(fr_obs%n) + 0.5_dp*s%delta_nu
+    freq_min = fr_obs%nu(1) - 1.5_dp*s%delta_nu
+    freq_max = fr_obs%nu(fr_obs%n) + 1.5_dp*s%delta_nu
     n_freq = CEILING(5._dp*(freq_max - freq_min)/s%delta_nu)
 
     ! Set up parameters

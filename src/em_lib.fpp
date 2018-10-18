@@ -840,10 +840,10 @@ contains
              if (fr_mod(l)%nu(j) > fr_obs(l)%nu(i)) exit
           end do
 
-          if (j <= 0) stop 'failed to match modes'
-
           j = j_min_dist
           
+          if (j <= 0) stop 'failed to match modes'
+
           fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
           fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
           fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
