@@ -810,6 +810,52 @@ contains
   !****
 
   subroutine match_modes (fr_mod, fr_obs, fr_cor)
+    ! ported from MESA, see
+    ! $MESA_DIR/star/astero/src/astero_support.f:set_to_closest
+    ! $MESA_DIR/star/astero/src/astero_support.f:find_closest
+    type(freq_t), intent(in)  :: fr_mod(0:3)
+    type(freq_t), intent(in)  :: fr_obs(0:3)
+    type(freq_t), intent(out) :: fr_cor(0:3)
+    integer :: l, i, j, j_prev, j_min_dist
+    real(dp) :: dist, min_dist
+
+    do l = 0, 3
+       if (fr_obs(l)%n < 1) cycle
+       if (fr_mod(l)%n < 1) cycle
+
+       fr_cor(l) = fr_obs(l)
+
+       j_prev = 0
+       do i = 1, fr_obs(l)%n
+          ! j = find_closest(fr_obs(l)*nu(i), j_prev)
+          min_dist = 1d99
+          j_min_dist = -1
+
+          do j = j_prev + 1, fr_mod(l)%n
+             dist = ABS(fr_mod(l)%nu(j) - fr_obs(l)%nu(i))
+             if (j_min_dist <= 0 .or. dist < min_dist) then
+                min_dist = dist
+                j_min_dist = j
+             end if
+             if (fr_mod(l)%nu(j) > fr_obs(l)%nu(i)) exit
+          end do
+
+          if (j <= 0) stop 'failed to match modes'
+
+          j = j_min_dist
+          
+          fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
+          fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
+          fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
+          j_prev = j
+       end do
+    end do
+    
+  end subroutine match_modes
+
+  !****
+  
+  subroutine match_modes_old (fr_mod, fr_obs, fr_cor)
     ! match observed modes to model modes one by one
     ! currently naive: just finds nearest mode
     type(freq_t), intent(in)  :: fr_mod(0:3)
@@ -829,7 +875,7 @@ contains
           fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
        end do
     end do
-  end subroutine match_modes
+  end subroutine match_modes_old
 
   !****
   
