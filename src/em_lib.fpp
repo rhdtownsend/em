@@ -22,6 +22,8 @@ module em_lib
   use eos_lib
   use interp_1d_lib
 
+  use atm_support
+
   use ISO_FORTRAN_ENV
 
   ! No implicit typing
@@ -131,7 +133,6 @@ contains
     integer                  :: ierr
     type(star_info), pointer :: s
     real(dp)                 :: f0_ov_div_f_ov
-    integer                  :: which_atm
 
     ! Create a star with the specified initial parameters
     ! mixing-length parameter
@@ -229,12 +230,9 @@ contains
     ! Set up the optical depth at the atmosphere base (this appears
     ! here because we don't use do_star_job_controls_before)
 
-    which_atm = atm_option(s%which_atm_option, ierr)
-    $ASSERT(ierr == 0,Failed in atm_option)
+    call get_atm_tau_base(s, s% tau_base, ierr)
+    $ASSERT(ierr == 0,Failed in get_atm_tau_base)
     
-    s%tau_base = atm_tau_base(which_atm, ierr)
-    $ASSERT(ierr == 0,Failed in atm_tau_base)
-
     ! Set up EOS blending
 
     call eos_set_HELM_OPAL_Zs(s%eos_handle, 1d0, 1d0, ierr)
@@ -327,7 +325,7 @@ contains
        end do step_loop
 
        if (DEBUG) then
-          write(OUTPUT_UNIT, *) 'Evolved:', s%star_age, s%time_step, s%why_TLim, result
+          write(OUTPUT_UNIT, *) 'Evolved:', s%star_age, s%time_step, s%why_TLim, s%model_number, result
        endif
 
        ! Once we get here, the only options are keep_going or terminate.

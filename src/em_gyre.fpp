@@ -33,8 +33,9 @@ module em_gyre
   use gyre_model_par
   use gyre_num_par
   use gyre_osc_par
-  use gyre_search
+  use gyre_scan
   use gyre_scan_par
+  use gyre_search
   use gyre_rad_bvp
 
   use ISO_FORTRAN_ENV
@@ -233,8 +234,7 @@ contains
 
     ! Mode
 
-    md_p = mode_par_t(i=1, &
-                      l=l, &
+    md_p = mode_par_t(l=l, &
                       m=0)
 
     ! Oscillation
