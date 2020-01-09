@@ -241,7 +241,7 @@ real function userff (npar, data, myid)
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id, t_code, log_g_min=3.5_DP)
+  call evolve_star_seismic(id, t_code)
 
   ! Get model frequencies
 
