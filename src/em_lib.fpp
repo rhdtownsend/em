@@ -528,34 +528,34 @@ contains
 
     logical, parameter :: DEBUG = .FALSE.
 
-    type(star_info), pointer :: s
-    integer                  :: ierr
-    logical, save            :: call_run_gyre = .FALSE.
-    real(dp)                 :: Delta_nu_obs
-    real(dp)                 :: Delta_nu_mod
-    real(dp), save           :: Delta_nu_prev = 0._dp
-    type(freq_t)             :: fr_mod(0:3)
-    type(freq_t)             :: fr_cor(0:3)
-    integer                  :: i_lo
-    real(dp)                 :: nu_obs_lo
-    real(dp)                 :: nu_mod_lo
-    real(dp), save           :: nu_mod_prev
-    integer                  :: n_pg_lo
-    integer, save            :: n_pg_prev
-    integer                  :: n(100)
-    integer, save            :: n_prev(100)
-    real(dp)                 :: y
-    real(dp)                 :: y_prev = 0._dp
-    real(dp)                 :: z
-    real(dp), save           :: z_min = 0._dp
-    real(dp), save           :: x_a = 0._dp
-    real(dp), save           :: x_b = 0._dp
-    real(dp), save           :: y_a = 0._dp
-    real(dp), save           :: y_b = 0._dp
-    real(dp), save           :: x_new = 0._dp
-    real(dp), save           :: delta_t = 0._dp
-    real(dp)                 :: dt_lim
-    integer                  :: l
+    type(star_info), pointer   :: s
+    integer                    :: ierr
+    logical, save              :: call_run_gyre = .FALSE.
+    real(dp)                   :: Delta_nu_obs
+    real(dp)                   :: Delta_nu_mod
+    real(dp), save             :: Delta_nu_prev = 0._dp
+    type(freq_t)               :: fr_mod(0:3)
+    type(freq_t)               :: fr_cor(0:3)
+    integer                    :: i_lo
+    real(dp)                   :: nu_obs_lo
+    real(dp)                   :: nu_mod_lo
+    real(dp), save             :: nu_mod_prev
+    integer                    :: n_lo
+    integer, save              :: n_lo_prev
+    integer, allocatable       :: n(:)
+    integer, allocatable, save :: n_prev(:)
+    real(dp)                   :: y
+    real(dp)                   :: y_prev = 0._dp
+    real(dp)                   :: z
+    real(dp), save             :: z_min = 0._dp
+    real(dp), save             :: x_a = 0._dp
+    real(dp), save             :: x_b = 0._dp
+    real(dp), save             :: y_a = 0._dp
+    real(dp), save             :: y_b = 0._dp
+    real(dp), save             :: x_new = 0._dp
+    real(dp), save             :: delta_t = 0._dp
+    real(dp)                   :: dt_lim
+    integer                    :: l
 
     ! Get the star pointer
 
@@ -603,12 +603,9 @@ contains
     i_lo = MINLOC(ABS(fr_cor(0)%nu - nu_obs_lo), DIM=1)
 
     nu_mod_lo = fr_cor(0)%nu(i_lo)
-    n_pg_lo = fr_cor(0)%n_pg(i_lo)
+    n_lo = fr_cor(0)%n_pg(i_lo)
 
-    n = 0
-    do l = 1, fr_cor(0)%n
-       n(l) = fr_cor(0)%n_pg(l)
-    end do
+    n = fr_cor(0)%n_pg
 
     ! Update discriminants
 
@@ -643,9 +640,8 @@ contains
 
           state_m = 'FINISH'
 
-       ! elseif (y*y_prev <= 0._dp .AND. n_pg_lo == n_pg_prev) then
-       elseif (y*y_prev <= 0._dp .AND. &
-            ALL(n_prev(1:fr_cor(0)%n) == fr_cor(0)%n_pg(1:fr_cor(0)%n))) then
+       ! elseif (y*y_prev <= 0._dp .AND. n_lo == n_lo_prev) then
+       elseif (y*y_prev <= 0._dp .AND. is_matched(n, n_prev)) then
 
           ! Set up a new bracket
 
@@ -667,8 +663,8 @@ contains
 
     case ('BRACKET')
 
-       ! if (n_pg_lo == n_pg_prev) then
-       if (ALL(n_prev(1:fr_cor(0)%n) == fr_cor(0)%n_pg(1:fr_cor(0)%n))) then
+       ! if (n_lo == n_lo_prev) then
+       if (is_matched(n, n_prev)) then
 
           ! Update the bracket
 
@@ -791,7 +787,7 @@ contains
 
        Delta_nu_mod = 0._dp
        nu_mod_lo = 0._dp
-       n_pg_lo = 0._dp
+       n_lo = 0
        y = 0._dp
 
     end select
@@ -801,7 +797,7 @@ contains
     Delta_nu_prev = Delta_nu_mod
 
     nu_mod_prev = nu_mod_lo
-    n_pg_prev = n_pg_lo
+    n_lo_prev = n_lo
 
     n_prev = n
 
@@ -814,6 +810,24 @@ contains
     ! Finish
 
     return
+
+  contains
+
+    function is_matched (a, b)
+
+      integer, intent(in) :: a(:)
+      integer, intent(in) :: b(:)
+      logical             :: is_matched
+
+      if (SIZE(a) == SIZE(b)) then
+         is_matched = ALL(a == b)
+      else
+         is_matched = .FALSE.
+      endif
+
+      return
+
+    end function is_matched
       
   end function extras_check_model_seismic_
 
