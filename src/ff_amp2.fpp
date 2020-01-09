@@ -12,16 +12,16 @@ real function userff (npar, data, myid)
   ! Variables
 
   integer :: n
-  integer :: ns=0
+  integer :: ns
   integer :: ll
-  integer :: l0=0
-  integer :: l1=0
-  integer :: l2=0
-  integer :: l3=0
+  integer :: l0
+  integer :: l1
+  integer :: l2
+  integer :: l3
   integer :: id
+  integer :: t_code
   integer :: i
   integer :: j
-  integer :: t_code
 
   integer, intent(in)   :: npar
   integer, intent(in)   :: myid
@@ -56,7 +56,7 @@ real function userff (npar, data, myid)
   real(dp) :: alpha_mod
   real(dp) :: age
   real(dp) :: resid
-  real(dp) :: chisq_r=0.d0
+  real(dp) :: chisq_r
 
   real(dp), dimension(npar), intent(in) :: data
   real(dp), dimension(:), allocatable :: nu0
@@ -80,7 +80,7 @@ real function userff (npar, data, myid)
 
   call init_em()
 
-  ! First pass to set array sizes
+  ! First pass to initialize arrays and set sizes
 
   open(unit=100, file='obs.dat', status='old', action='read')
   l0=0
@@ -186,7 +186,6 @@ real function userff (npar, data, myid)
   enddo
   close(100)
 
-  fr_obs = freq_t()
   fr_obs(0) = freq_t(nu0,dnu0,Enorm0,nl0)
   fr_obs(1) = freq_t(nu1,dnu1,Enorm1,nl1)
   fr_obs(2) = freq_t(nu2,dnu2,Enorm2,nl2)
@@ -206,25 +205,21 @@ real function userff (npar, data, myid)
 
   ! Create a star
 
-  ! full range
   !M_mod = 1.0*data(1)+0.75
   !Z_mod = 10.**(1.4*data(2)-2.7)
   !Y_mod = 0.10*data(3)+0.22
   !alpha_mod = 2.0*data(4)+1.0
 
-  ! around solar
-  M_mod = 0.1*data(1)+0.95
+  M_mod = 0.2*data(1)+0.90
+  Z_mod = 10.**(0.3*data(2)-1.9)
+  Y_mod = 0.04*data(3)+0.24
+  alpha_mod = 1.0*data(4)+1.5
+
+  !M_mod = 0.02*data(1)+0.99
   !Z_mod = 10.**(0.1*data(2)-1.8)
-  !Y_mod = 0.02*data(3)+0.26
-  !alpha_mod = 1.0*data(4)+1.5
+  !Y_mod = 0.01*data(3)+0.26
+  !alpha_mod = 0.2*data(4)+1.9
 
-  ! close to solar
-  !M_mod = 0.05*data(1)+0.98
-  Z_mod = 10.**(0.1*data(2)-1.8)
-  Y_mod = 0.02*data(3)+0.26
-  alpha_mod = 0.5*data(4)+1.8
-
-  ! solar-like model
   !M_mod = 1.0d0
   !Z_mod = 0.0173d0
   !Y_mod = 0.265d0
@@ -237,37 +232,27 @@ real function userff (npar, data, myid)
        Y = Y_mod, &
        Z = Z_mod, &
        alpha = alpha_mod, &
-       f_ov=0.0d0, &
-       max_age=1.5d10)
+       f_ov = 0.0d0, &
+       max_age = 1D11)
 
   ! Evolve it to the ZAMS
 
   call evolve_star_to_zams(id, t_code)
 
-  if (t_code == t_ok) then
-     !print *,'Evolve to ZAMS: OK'
-  else
-     print *,'Evolve to ZAMS: Failed, termination code =', t_code
-     stop
-  end if
-
   ! Evolve it until seismic constraints are met
 
-  !print *,' calling evolve_star_seismic'
-  call evolve_star_seismic(id, t_code)
+  call evolve_star_seismic(id, t_code, log_g_min=3.5_DP)
 
-  if (t_code == t_ok) then
-     !print *,'Evolve to seismic: OK'
-  elseif (t_code == t_max_age) then
-     print *,'Evolve to seismic: Reached maximum age'
-  else
-     print *,'Evolve to seismic: Failed, termination code =', t_code
-     !stop
-  endif
+  ! Get model frequencies
 
-  ! Analyze results if the seismic run went OK
+  fr_mod(0) = get_mod_freqs(0)
+  fr_mod(1) = get_mod_freqs(1)
+  fr_mod(2) = get_mod_freqs(2)
+  fr_mod(3) = get_mod_freqs(3)
 
-  if (t_code == t_ok) then
+  ! See if any modes were found
+
+  if (ANY(fr_mod%n > 0)) then
 
      ! Get model data
 
@@ -289,36 +274,29 @@ real function userff (npar, data, myid)
      if (spec(4).eq.1) chisq_r = chisq_r + (R_o-R)*(R_o-R)/(R_e*R_e)
      if (spec(5).eq.1) chisq_r = chisq_r + (L_o-L)*(L_o-L)/(L_e*L_e)
 
-     ! Get model frequencies
-
-     fr_mod = freq_t()
-     fr_mod(0) = get_mod_freqs(0)
-     fr_mod(1) = get_mod_freqs(1)
-     fr_mod(2) = get_mod_freqs(2)
-     fr_mod(3) = get_mod_freqs(3)
-
      ! Get corrected frequencies
 
-     fr_cor = freq_t()
      call apply_combined_correction(fr_mod, fr_obs, fr_cor)
 
      ! Calculate seismic chisq
-
+     
      do i = 0, 3
         do j = 1, fr_obs(i)%n
            resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
            chisq_r = chisq_r + resid*resid
         end do
      end do
-  
+     
      userff = float(n+ns-5)/chisq_r
 
   else
 
-     userff = 0.d0
+     print *,'No modes found'
 
-  end if
+     userff = TINY(0.)
 
+  endif
+  
   ! Finish
 
   deallocate ( nl0 )
@@ -347,3 +325,4 @@ real function userff (npar, data, myid)
   call final_em()
 
 end function userff
+
