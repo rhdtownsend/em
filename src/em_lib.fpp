@@ -288,7 +288,7 @@ contains
        step_loop: do
 
           ! Take the step
-            
+
           result = star_evolve_step(id, first_try, just_did_backup)
 
           ! Check the model
@@ -431,7 +431,7 @@ contains
 
   !****
 
-  subroutine evolve_star_seismic (id, t_code, f_enter, f_exit, y_tol, dt_frac)
+  subroutine evolve_star_seismic (id, t_code, f_enter, f_exit, y_tol, dt_frac, log_g_min)
 
     integer, intent(in)            :: id
     integer, intent(out)           :: t_code
@@ -439,10 +439,12 @@ contains
     real(dp), intent(in), optional :: f_exit
     real(dp), intent(in), optional :: y_tol
     real(dp), intent(in), optional :: dt_frac
+    real(dp), intent(in), optional :: log_g_min
 
     type(star_info), pointer                        :: s
     integer                                         :: ierr
     procedure(extras_check_model_seismic_), pointer :: ecm_save
+    real(DP)                                        :: lgg_save
 
     ! Set up parameters
 
@@ -486,6 +488,11 @@ contains
     ecm_save => s%extras_check_model
     s%extras_check_model => extras_check_model_seismic_
 
+    if (PRESENT(log_g_min)) then
+       lgg_save = s%log_g_lower_limit
+       s%log_g_lower_limit = log_g_min
+    endif
+
     ! Initialize the state machine
 
     state_m = 'START'
@@ -494,11 +501,16 @@ contains
 
     call evolve_star(id, t_code)
 
-    if (t_code == t_extras_check_model) t_code = t_ok
+    if (t_code == t_extras_check_model .OR. &
+        t_code == t_log_g_lower_limit) t_code = t_ok
 
     ! Reset controls
 
     s%extras_check_model => ecm_save
+
+    if (PRESENT(log_g_min)) then
+       s%log_g_lower_limit = lgg_save
+    endif
 
     ! Finish
 
