@@ -1,7 +1,7 @@
 ! Module   : em_gyre
 ! Purpose  : GYRE routines for Embedded MESA module
 !
-! Copyright 2016 Rich Townsend
+! Copyright 2016-2020 Rich Townsend
 
 $include 'core.inc'
 
@@ -35,6 +35,7 @@ module em_gyre
   use gyre_osc_par
   use gyre_scan
   use gyre_scan_par
+  use gyre_rot_par
   use gyre_search
   use gyre_rad_bvp
 
@@ -67,6 +68,7 @@ contains
     type(model_par_t)             :: ml_p
     type(mode_par_t)              :: md_p
     type(osc_par_t)               :: os_p
+    type(rot_par_t)               :: rt_p
     type(num_par_t)               :: nm_p
     type(grid_par_t)              :: gr_p
     type(scan_par_t), allocatable :: sc_p(:)
@@ -89,7 +91,7 @@ contains
 
     ! Set up parameters
 
-    call set_gyre_pars(l, freq_min, freq_max, n_freq, 'UHZ', ml_p, md_p, os_p, nm_p, gr_p, sc_p)
+    call set_gyre_pars(l, freq_min, freq_max, n_freq, 'UHZ', ml_p, md_p, os_p, rt_p, nm_p, gr_p, sc_p)
 
     ! Make the model
 
@@ -97,7 +99,7 @@ contains
 
     ! Find modes
 
-    call find_gyre_modes(ml, md_p, os_p, nm_p, gr_p, sc_p, cx, md)
+    call find_gyre_modes(ml, md_p, os_p, rt_p, nm_p, gr_p, sc_p, cx, md)
 
     ! Store data
 
@@ -211,7 +213,7 @@ contains
 
   !****
 
-  subroutine set_gyre_pars (l, freq_min, freq_max, n_freq, freq_units, ml_p, md_p, os_p, nm_p, gr_p, sc_p)
+  subroutine set_gyre_pars (l, freq_min, freq_max, n_freq, freq_units, ml_p, md_p, os_p, rt_p, nm_p, gr_p, sc_p)
 
     integer, intent(in)                        :: l
     real(dp), intent(in)                       :: freq_min
@@ -221,6 +223,7 @@ contains
     type(model_par_t), intent(out)             :: ml_p
     type(mode_par_t), intent(out)              :: md_p
     type(osc_par_t), intent(out)               :: os_p
+    type(rot_par_t), intent(out)               :: rt_p
     type(num_par_t), intent(out)               :: nm_p
     type(grid_par_t), intent(out)              :: gr_p
     type(scan_par_t), allocatable, intent(out) :: sc_p(:)
@@ -243,6 +246,10 @@ contains
                      outer_bound='JCD', &
                      inertia_norm='RADIAL', &
                      eddington_approx=.TRUE.)
+
+    ! Rotation
+
+    rt_p = rot_par_t()
 
     ! Numerical
 
@@ -278,11 +285,12 @@ contains
 
   !****
 
-  subroutine find_gyre_modes (ml, md_p, os_p, nm_p, gr_p, sc_p, cx, md)
+  subroutine find_gyre_modes (ml, md_p, os_p, rt_p, nm_p, gr_p, sc_p, cx, md)
 
     type(evol_model_t), pointer, intent(in) :: ml
     type(mode_par_t), intent(in)            :: md_p
     type(osc_par_t), intent(in)             :: os_p
+    type(rot_par_t), intent(in)             :: rt_p
     type(num_par_t), intent(in)             :: nm_p
     type(grid_par_t), intent(in)            :: gr_p
     type(scan_par_t), intent(in)            :: sc_p(:)
@@ -300,7 +308,7 @@ contains
     ! Set up the context
 
     allocate(cx)
-    cx = context_t(ml, gr_p, md_p, os_p)
+    cx = context_t(ml, gr_p, md_p, os_p, rt_p)
 
     ! Set up the frequency array
 
@@ -322,7 +330,7 @@ contains
        omega_max = HUGE(0._dp)
     endif
 
-    call check_scan(ml, gr, omega, md_p, os_p)
+    call check_scan(cx, gr, omega, md_p, os_p)
 
     ! Create the bvp_t
 
