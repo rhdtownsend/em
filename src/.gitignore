@@ -1,0 +1,7 @@
+*.o
+*.mod
+.depend
+em_*.f90
+gyre_*.f90
+core_*.f90
+
