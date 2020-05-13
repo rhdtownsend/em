@@ -10,7 +10,6 @@ module em_gyre
   ! Uses
 
   use core_system
-  use core_constants
 
   use em_freq
   use em_util
@@ -21,12 +20,14 @@ module em_gyre
 
   use gyre_ad_bvp
   use gyre_bvp
+  use gyre_constants
   use gyre_context
   use gyre_evol_model
   use gyre_ext
   use gyre_grid
   use gyre_grid_par
   use gyre_grid_factory
+  use gyre_math
   use gyre_mode
   use gyre_mode_par
   use gyre_model
@@ -260,9 +261,9 @@ contains
 
 !    gr_p = grid_par_t(alpha_osc=10._dp, &
 !                      alpha_exp=2._dp, &
-!                      n_inner=5)
+!                      alpha_ctr=10._dp)
 
-    gr_p = grid_par_t(n_inner=5)
+    gr_p = grid_par_t(alpha_ctr=10._dp)
 
     ! Scan
 

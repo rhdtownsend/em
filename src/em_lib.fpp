@@ -10,7 +10,6 @@ module em_lib
   ! Uses
 
   use core_system
-  use core_constants
 
   use em_gyre
   use em_freq

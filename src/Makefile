@@ -28,13 +28,29 @@ LDFLAGS:=${LDFLAGS} ${LOAD_MESA_STAR} -lz
 
 # Include other makefiles
 
-SUBDIRS_GYRE=extern/core:common:par:diff:bvp:interp:model:matrix:search:context:ext:frontend:ad:rad:nad:rot:tar:tide:mode:grid:frontend:output:poly
+SUBDIRS_GYRE=extern/core:common:math:par:diff:bvp:interp:model:matrix:search:context:ext:frontend:ad:rad:nad:rot:tar:tide:mode:grid:frontend:output:poly
 
 SUBDIRS_MESA=
 
 SUBDIRS=${GYRE_DIR}/src/$(subst :,:${GYRE_DIR}/src/,${SUBDIRS_GYRE}):${SUBDIRS_MESA}
 
-include Make.inc
+include ${GYRE_DIR}/src/build/Make.inc
+
+# Additional rules
+
+vpath %.mod ${MODPATH}
+
+ifeq ($(CRMATH),yes)
+gyre_math.fpp: gyre_math_crmath.fpp
+	@ln -sf $< $@
+else
+gyre_math.fpp: gyre_math_intrinsic.fpp
+	@ln -sf $< $@
+endif
+
+.INTERMEDIATE: gyre_math.fpp
+
+.depend: gyre_math.fpp
 
 # Additional deps
 
