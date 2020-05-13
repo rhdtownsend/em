@@ -1,0 +1,7 @@
+# .gitignore file for EM
+
+*~
+*.o
+*.mod
+*.smod
+
