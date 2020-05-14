@@ -14,6 +14,8 @@ module em_lib
   use em_gyre
   use em_freq
 
+  use gyre_math
+
   use star_lib
   use star_def
   use const_def, only: dp
@@ -96,6 +98,8 @@ contains
     ! Initialize
 
     call clear_obs_freqs()
+
+    call init_math()
 
     ! Finish
 
