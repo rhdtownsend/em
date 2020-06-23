@@ -14,7 +14,7 @@ module em_lib
   use em_gyre
   use em_freq
 
-  use gyre_math
+  use gyre_math, only : init_math
 
   use star_lib
   use star_def
@@ -142,7 +142,7 @@ contains
 
     ! Allocate the star
  
-    id = alloc_star(ierr)
+    call alloc_star(id, ierr)
     $ASSERT(ierr == 0,Failure in alloc_star)
 
     call star_ptr(id, s, ierr)
@@ -184,37 +184,26 @@ contains
     s%T_mix_limit = 1d4
 
 !    s%varcontrol_target = 1D-4
-!    s%mesh_delta_coeff = 0.5D0
+    !    s%mesh_delta_coeff = 0.5D0
+
+    s%use_dedt_form_of_energy_eqn = .true.
+    s%use_gold_tolerances = .true.
 
     ! (Note: this mirrors the code in star/astero/src/extras_support)
 
     f0_ov_div_f_ov = 1._dp
 
-    s% overshoot_f_above_nonburn_core = f_ov
-    s% overshoot_f_above_nonburn_shell = f_ov
-    s% overshoot_f_below_nonburn_shell = f_ov
-    s% overshoot_f_above_burn_h_core = f_ov
-    s% overshoot_f_above_burn_h_shell = f_ov
-    s% overshoot_f_below_burn_h_shell = f_ov
-    s% overshoot_f_above_burn_he_core = f_ov
-    s% overshoot_f_above_burn_he_shell = f_ov
-    s% overshoot_f_below_burn_he_shell = f_ov
-    s% overshoot_f_above_burn_z_core = f_ov
-    s% overshoot_f_above_burn_z_shell = f_ov
-    s% overshoot_f_below_burn_z_shell = f_ov
-    s% overshoot_f0_above_nonburn_core = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_nonburn_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_below_nonburn_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_h_core = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_h_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_below_burn_h_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_he_core = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_he_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_below_burn_he_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_z_core = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_above_burn_z_shell = f0_ov_div_f_ov*f_ov
-    s% overshoot_f0_below_burn_z_shell = f0_ov_div_f_ov*f_ov
-    
+    if (f_ov > 0._dp) then
+
+       s%overshoot_scheme(1) = 'exponential'
+       s%overshoot_zone_type(1) = 'any'
+       s% overshoot_zone_loc(1) = 'any'
+       s%overshoot_bdy_loc(1) = 'any'
+       s%overshoot_f(1) = f_ov
+       s%overshoot_f0(1) = f0_ov_div_f_ov*f_ov
+
+    endif
+
     ! Output controls
 
     s%write_profiles_flag = .FALSE.
@@ -298,7 +287,7 @@ contains
           
           if (result == keep_going) result = star_check_model(id)
           if (result == keep_going .AND. &
-               ASSOCIATED(s%extras_check_model)) result = s%extras_check_model(id, 0)
+               ASSOCIATED(s%extras_check_model)) result = s%extras_check_model(id)
 
           ! Pick the next timestep
           
@@ -335,12 +324,12 @@ contains
        ! redo, retry, or backup must be done inside the step_loop
 
        if (result == keep_going) then
-          result = star_finish_step(id, 0, .FALSE., ierr)
+          result = star_finish_step(id, .FALSE., ierr)
           $ASSERT(ierr == 0,Failed in star_finish_step)
        endif
 
        if (result == terminate) then
-          result = star_finish_step(id, 0, .FALSE., ierr)
+          result = star_finish_step(id, .FALSE., ierr)
           $ASSERT(ierr == 0,Failed in star_finish_step)
           exit evolve_loop
        endif
@@ -387,6 +376,8 @@ contains
     ! Reset controls
 
     s%stop_near_zams = stp_save
+
+    ! Add atmosphere after pre-MS (from Warrick, 6/4/20)
 
     s%atm_option = 'T_tau'
     s%atm_T_tau_relation = 'Eddington'
@@ -528,10 +519,9 @@ contains
 
   !****
 
-  function extras_check_model_seismic_ (id, id_extra) result (action)
+  function extras_check_model_seismic_ (id) result (action)
 
     integer, intent(in) :: id
-    integer, intent(in) :: id_extra
     integer             :: action
 
     logical, parameter :: DEBUG = .FALSE.
