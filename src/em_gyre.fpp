@@ -146,7 +146,7 @@ contains
     call star_get_pulse_data(id, 'GYRE', &
          add_center_point=.TRUE., &
          keep_surface_point=.TRUE., &
-         add_atmosphere=.FALSE., &
+         add_atmosphere=.TRUE., &
          global_data=global_data, &
          point_data=point_data, &
          ierr=ierr)
