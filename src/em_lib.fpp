@@ -388,6 +388,11 @@ contains
 
     s%stop_near_zams = stp_save
 
+    s%atm_option = 'T_tau'
+    s%atm_T_tau_relation = 'Eddington'
+    s%atm_T_tau_opacity = 'varying'
+    s%atm_build_tau_outer = 1d-4 ! default is 1d-3
+
     ! Finish
 
     return
