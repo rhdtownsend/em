@@ -1,6 +1,6 @@
 # Variables
 
-TARGETS=em_test em_test_warrick testffamp2
+TARGETS=em_test testffamp2
 
 DEBUG=yes
 FPE=no
