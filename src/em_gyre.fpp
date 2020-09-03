@@ -317,7 +317,7 @@ contains
 
     ! Create the grid
 
-    gr = grid_t(cx, omega, gr_p)
+    gr = grid_t(cx, omega, gr_p, os_p)
 
     if (gr%n_k > 25000) stop 'Grid exceeded hard-wired size limit of 25,000 points'
 
