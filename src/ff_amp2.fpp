@@ -138,23 +138,23 @@ real function userff (npar, data, myid)
      if (lchr.eq."T") then
         Teff_o=f
         Teff_e=e
-        spec(1)=1
+	spec(1)=1
      elseif (lchr.eq."G") then
         logg_o=f
         logg_e=e
-        spec(2)=1
+	spec(2)=1
      elseif (lchr.eq."M") then
         FeH_o=f
         FeH_e=e
-        spec(3)=1
+	spec(3)=1
      elseif (lchr.eq."R") then
         R_o=f
         R_e=e
-        spec(4)=1
+	spec(4)=1
      elseif (lchr.eq."L") then
         L_o=f
         L_e=e
-        spec(5)=1
+	spec(5)=1
      else
         read(lchr,*) ll
         if(ll.eq.0) then
@@ -205,25 +205,11 @@ real function userff (npar, data, myid)
 
   ! Create a star
 
-  !M_mod = 1.0*data(1)+0.75
+  M_mod = 1.0*data(1)+0.75
   !Z_mod = 10.**(1.4*data(2)-2.7)
-  !Y_mod = 0.10*data(3)+0.22
-  !alpha_mod = 2.0*data(4)+1.0
-
-  M_mod = 0.2*data(1)+0.90
-  Z_mod = 10.**(0.3*data(2)-1.9)
-  Y_mod = 0.04*data(3)+0.24
-  alpha_mod = 1.0*data(4)+1.5
-
-  !M_mod = 0.02*data(1)+0.99
-  !Z_mod = 10.**(0.1*data(2)-1.8)
-  !Y_mod = 0.01*data(3)+0.26
-  !alpha_mod = 0.2*data(4)+1.9
-
-  !M_mod = 1.0d0
-  !Z_mod = 0.0173d0
-  !Y_mod = 0.265d0
-  !alpha_mod = 2.0d0
+  Z_mod = 10.**(0.8*data(2)-2.1)
+  Y_mod = 0.10*data(3)+0.22
+  alpha_mod = 2.0*data(4)+1.0
 
   !print *,'M,Z,Y,alpha:',M_mod,Z_mod,Y_mod,alpha_mod
 
@@ -232,8 +218,8 @@ real function userff (npar, data, myid)
        Y = Y_mod, &
        Z = Z_mod, &
        alpha = alpha_mod, &
-       f_ov = 0.0d0, &
-       max_age = 1D11)
+       f_ov=0.0d0, &
+       max_age=1.5d10)
 
   ! Evolve it to the ZAMS
 
@@ -241,7 +227,7 @@ real function userff (npar, data, myid)
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id, t_code)
+  call evolve_star_seismic(id, t_code, log_g_min=3.75d0)
 
   ! Get model frequencies
 
@@ -250,53 +236,50 @@ real function userff (npar, data, myid)
   fr_mod(2) = get_mod_freqs(2)
   fr_mod(3) = get_mod_freqs(3)
 
-  ! See if any modes were found
-
   if (ANY(fr_mod%n > 0)) then
 
-     ! Get model data
+    ! Get model data
 
-     call get_mod_data(Teff, logg, FeH, R, L, age)
+    call get_mod_data(Teff, logg, FeH, R, L, age)
 
-     !print *,'Teff: ',Teff
-     !print *,'logg: ',logg
-     !print *,' FeH: ',FeH
-     !print *,'R/Ro: ',R
-     !print *,'L/Lo: ',L
-     !print *,' age: ',age
+    !print *,'Teff: ',Teff
+    !print *,'logg: ',logg
+    !print *,' FeH: ',FeH
+    !print *,'R/Ro: ',R
+    !print *,'L/Lo: ',L
+    !print *,' age: ',age
 
-     ! Calculate spectroscopic chisq
+    ! Calculate spectroscopic chisq
 
-     chisq_r=0.d0
-     if (spec(1).eq.1) chisq_r = chisq_r + (Teff_o-Teff)*(Teff_o-Teff)/(Teff_e*Teff_e)
-     if (spec(2).eq.1) chisq_r = chisq_r + (logg_o-logg)*(logg_o-logg)/(logg_e*logg_e)
-     if (spec(3).eq.1) chisq_r = chisq_r + (FeH_o-FeH)*(FeH_o-FeH)/(FeH_e*FeH_e)
-     if (spec(4).eq.1) chisq_r = chisq_r + (R_o-R)*(R_o-R)/(R_e*R_e)
-     if (spec(5).eq.1) chisq_r = chisq_r + (L_o-L)*(L_o-L)/(L_e*L_e)
+    chisq_r=0.d0
+    if (spec(1).eq.1) chisq_r = chisq_r + (Teff_o-Teff)*(Teff_o-Teff)/(Teff_e*Teff_e)
+    if (spec(2).eq.1) chisq_r = chisq_r + (logg_o-logg)*(logg_o-logg)/(logg_e*logg_e)
+    if (spec(3).eq.1) chisq_r = chisq_r + (FeH_o-FeH)*(FeH_o-FeH)/(FeH_e*FeH_e)
+    if (spec(4).eq.1) chisq_r = chisq_r + (R_o-R)*(R_o-R)/(R_e*R_e)
+    if (spec(5).eq.1) chisq_r = chisq_r + (L_o-L)*(L_o-L)/(L_e*L_e)
 
-     ! Get corrected frequencies
+    ! Get corrected frequencies
 
-     call apply_combined_correction(fr_mod, fr_obs, fr_cor)
+    call apply_combined_correction(fr_mod, fr_obs, fr_cor)
 
-     ! Calculate seismic chisq
-     
-     do i = 0, 3
-        do j = 1, fr_obs(i)%n
-           resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
-           chisq_r = chisq_r + resid*resid
-        end do
-     end do
-     
-     userff = float(n+ns-5)/chisq_r
+    ! Calculate seismic chisq
+
+    do i = 0, 3
+       do j = 1, fr_obs(i)%n
+          resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
+	  chisq_r = chisq_r + resid*resid
+!	  if(i.eq.0) print *,fr_obs(i)%nu(j),fr_mod(i)%nu(j),fr_cor(i)%nu(j),resid
+       end do
+    end do
+  
+    userff = float(n+ns-5)/chisq_r
 
   else
 
-     print *,'No modes found'
-
-     userff = TINY(0.)
+    userff = TINY(0.)
 
   endif
-  
+
   ! Finish
 
   deallocate ( nl0 )

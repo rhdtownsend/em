@@ -1,6 +1,6 @@
 # Variables
 
-TARGETS=em_test em_test_warrick testffamp2
+TARGETS=em_test testffamp2
 
 DEBUG=yes
 FPE=no
@@ -57,7 +57,7 @@ endif
 # Additional deps
 
 testffamp2: ff_amp2.o userff.o em_lib.o em_gyre.o em_freq.o em_util.o
-	${F9XC} ${F9XFLAGS} -o $@ $^ gyre_*.o core_*.o ${LDFLAGS}
+	${F9XC} ${F9XFLAGS} -o ../../$@ $^ gyre_*.o core_*.o ${LDFLAGS}
 
 ff_amp2.o: em_lib.mod
 

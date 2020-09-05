@@ -14,8 +14,10 @@ module em_lib
   use em_gyre
   use em_freq
 
-  use gyre_math, only : init_math
+  use gyre_math
 
+  use star_data_lib
+  use star_data_def
   use star_lib
   use star_def
   use const_def, only: dp
@@ -180,30 +182,35 @@ contains
     s%threshold_grad_mu_for_double_point = 1d0
     s%max_number_of_double_points = 100
 
+    s%use_dedt_form_of_energy_eqn = .TRUE.
+    s%min_timestep_limit = 1d2
+    ! s%max_years_for_timestep = 1d7
+
     s%do_element_diffusion = .TRUE.
     s%T_mix_limit = 1d4
 
-!    s%varcontrol_target = 1D-4
-    !    s%mesh_delta_coeff = 0.5D0
+    s%diffusion_class_factor(:) = 1
+    if (M >= 1.1) s%diffusion_class_factor(:) = 12-10*M
+    if (M >= 1.2) s%diffusion_class_factor(:) = 0
 
-    s%use_dedt_form_of_energy_eqn = .true.
-    s%use_gold_tolerances = .true.
+    
+
+!    s%varcontrol_target = 1D-4
+!    s%mesh_delta_coeff = 0.5D0
 
     ! (Note: this mirrors the code in star/astero/src/extras_support)
 
     f0_ov_div_f_ov = 1._dp
 
     if (f_ov > 0._dp) then
-
-       s%overshoot_scheme(1) = 'exponential'
-       s%overshoot_zone_type(1) = 'any'
-       s% overshoot_zone_loc(1) = 'any'
-       s%overshoot_bdy_loc(1) = 'any'
-       s%overshoot_f(1) = f_ov
-       s%overshoot_f0(1) = f0_ov_div_f_ov*f_ov
-
-    endif
-
+       s% overshoot_f0 = f0_ov_div_f_ov*f_ov
+       s% overshoot_f = f_ov
+       s% overshoot_scheme = 'exponential'
+       s% overshoot_zone_type = 'any'
+       s% overshoot_zone_loc = 'any'
+       s% overshoot_bdy_loc ='any'
+    end if
+    
     ! Output controls
 
     s%write_profiles_flag = .FALSE.
@@ -214,6 +221,27 @@ contains
     s%photo_directory = '.'
 
     s%terminal_interval = 0
+
+    ! Include the atmosphere as part of the interior
+    ! More stable but implies Eddington T(tau) relation
+    s% job% set_to_this_tau_factor = 1.5d-4
+    s% job% set_tau_factor = .TRUE.
+    s% job% set_initial_tau_factor = .TRUE.
+    s% tau_factor = 1.5d-4
+    ! s% job% relax_to_this_tau_factor = 1.5d-4
+    ! s% job% dlogtau_factor = 0.1d0
+    ! s% job% relax_tau_factor = .TRUE.
+
+    ! Add defaults explicitly to be safe
+    s% atm_option = 'T_tau'
+    s% atm_T_tau_relation = 'Eddington'
+    s% atm_T_tau_opacity = 'fixed'
+    s% atm_build_tau_outer = 1d-4
+
+    ! s%report_ierr = .TRUE.
+    ! s%report_hydro_solver_progress = .TRUE.
+    ! s%report_bad_negative_xa = .TRUE.
+    ! s%stop_for_bad_nums = .TRUE.
 
     ! Set up procedure hooks
 
@@ -378,11 +406,10 @@ contains
     s%stop_near_zams = stp_save
 
     ! Add atmosphere after pre-MS (from Warrick, 6/4/20)
-
-    s%atm_option = 'T_tau'
-    s%atm_T_tau_relation = 'Eddington'
-    s%atm_T_tau_opacity = 'varying'
-    s%atm_build_tau_outer = 1d-4 ! default is 1d-3
+    ! s% atm_option = 'T_tau'
+    ! s% atm_T_tau_relation = 'Eddington'
+    ! s% atm_T_tau_opacity = 'varying'
+    ! s% atm_build_tau_outer = 1d-4 ! default is 1d-3
 
     ! Finish
 
@@ -853,7 +880,8 @@ contains
           min_dist = 1d99
           j_min_dist = -1
 
-          do j = j_prev + 1, fr_mod(l)%n
+!          do j = j_prev + 1, fr_mod(l)%n
+          do j = 1, fr_mod(l)%n
              dist = ABS(fr_mod(l)%nu(j) - fr_obs(l)%nu(i))
              if (j_min_dist <= 0 .or. dist < min_dist) then
                 min_dist = dist
