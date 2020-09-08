@@ -16,8 +16,7 @@
       if ((data(1).gt.1).or.(data(4).gt.1))
      + stop "please enter scaled units"
 
-c  scaled units => fitting data
-      myid=1
+      myid=0
 
       fitness = userff(npar,data,myid)
       print *,'chisq_r=',1./fitness

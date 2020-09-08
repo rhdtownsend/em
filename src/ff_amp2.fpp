@@ -206,12 +206,11 @@ real function userff (npar, data, myid)
   ! Create a star
 
   M_mod = 1.0*data(1)+0.75
-  !Z_mod = 10.**(1.4*data(2)-2.7)
   Z_mod = 10.**(0.8*data(2)-2.1)
   Y_mod = 0.10*data(3)+0.22
   alpha_mod = 2.0*data(4)+1.0
 
-  !print *,'M,Z,Y,alpha:',M_mod,Z_mod,Y_mod,alpha_mod
+  if(myid.eq.0) print *,'M,Z,Y,alpha:',M_mod,Z_mod,Y_mod,alpha_mod
 
   id = create_star( &
        M = M_mod, &
@@ -242,12 +241,12 @@ real function userff (npar, data, myid)
 
     call get_mod_data(Teff, logg, FeH, R, L, age)
 
-    !print *,'Teff: ',Teff
-    !print *,'logg: ',logg
-    !print *,' FeH: ',FeH
-    !print *,'R/Ro: ',R
-    !print *,'L/Lo: ',L
-    !print *,' age: ',age
+    if(myid.eq.0) print *,'Teff: ',Teff
+    if(myid.eq.0) print *,'logg: ',logg
+    if(myid.eq.0) print *,' FeH: ',FeH
+    if(myid.eq.0) print *,'R/Ro: ',R
+    if(myid.eq.0) print *,'L/Lo: ',L
+    if(myid.eq.0) print *,' age: ',age
 
     ! Calculate spectroscopic chisq
 
@@ -268,7 +267,7 @@ real function userff (npar, data, myid)
        do j = 1, fr_obs(i)%n
           resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
 	  chisq_r = chisq_r + resid*resid
-!	  if(i.eq.0) print *,fr_obs(i)%nu(j),fr_mod(i)%nu(j),fr_cor(i)%nu(j),resid
+	  if(myid.eq.0) print *,i,fr_mod(i)%n_pg(j),fr_obs(i)%nu(j),fr_obs(i)%dnu(j),fr_cor(i)%nu(j),resid
        end do
     end do
   
