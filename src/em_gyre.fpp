@@ -262,11 +262,11 @@ contains
     ! Grid (the first setting is preferable, but can lead to huge
     ! models. So, go with the second one for now)
 
-!    gr_p = grid_par_t(alpha_osc=10._dp, &
-!                      alpha_exp=2._dp, &
-!                      alpha_ctr=10._dp)
+!    gr_p = grid_par_t(w_osc=10._dp, &
+!                      w_exp=2._dp, &
+!                      w_ctr=10._dp)
 
-    gr_p = grid_par_t(alpha_ctr=10._dp)
+    gr_p = grid_par_t(w_ctr=10._dp)
 
     ! Scan
 
