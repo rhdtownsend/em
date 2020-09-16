@@ -184,6 +184,7 @@ contains
 
     s%use_dedt_form_of_energy_eqn = .TRUE.
     s%min_timestep_limit = 1d2
+    s%redo_limit = 20
     ! s%max_years_for_timestep = 1d7
 
     s%do_element_diffusion = .TRUE.
@@ -192,8 +193,6 @@ contains
     s%diffusion_class_factor(:) = 1
     if (M >= 1.1) s%diffusion_class_factor(:) = 12-10*M
     if (M >= 1.2) s%diffusion_class_factor(:) = 0
-
-    
 
 !    s%varcontrol_target = 1D-4
 !    s%mesh_delta_coeff = 0.5D0
