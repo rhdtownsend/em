@@ -249,7 +249,7 @@ contains
     os_p = osc_par_t(x_ref=1._dp, &
                      outer_bound='JCD', &
                      inertia_norm='RADIAL', &
-                     eddington_approx=.TRUE.)
+                     alpha_rht=1._DP)
 
     ! Rotation
 
@@ -316,7 +316,7 @@ contains
 
     ! Set up the frequency array
 
-    call build_scan(cx, md_p, os_p, sc_p, omega)
+    call build_scan(cx, md_p, os_p, sc_p, 'REAL', omega)
 
     ! Create the grid
 
@@ -351,7 +351,7 @@ contains
 
     allocate(md(d_md))
 
-    call scan_search(bp, omega, omega_min, omega_max, process_mode, nm_p)
+    call bracket_search(bp, omega, omega_min, omega_max, process_mode, nm_p)
 
     ! Resize the md array just to the modes found
 
