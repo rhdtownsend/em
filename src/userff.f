@@ -4,12 +4,12 @@
 
       double precision data(36),fitness
       real userff
-      integer npar,IARGC,i,myid
+      integer npar,i,myid
       character*80 par_string
 
-      npar = IARGC()
+      npar = COMMAND_ARGUMENT_COUNT()
       do i=1,npar
-         CALL GETARG(i,par_string)
+         CALL GET_COMMAND_ARGUMENT(i,par_string)
          READ(par_string,*) data(i)
       enddo
 
