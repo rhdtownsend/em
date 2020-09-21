@@ -138,23 +138,23 @@ real function userff (npar, data, myid)
      if (lchr.eq."T") then
         Teff_o=f
         Teff_e=e
-	spec(1)=1
+        spec(1)=1
      elseif (lchr.eq."G") then
         logg_o=f
         logg_e=e
-	spec(2)=1
+        spec(2)=1
      elseif (lchr.eq."M") then
         FeH_o=f
         FeH_e=e
-	spec(3)=1
+        spec(3)=1
      elseif (lchr.eq."R") then
         R_o=f
         R_e=e
-	spec(4)=1
+        spec(4)=1
      elseif (lchr.eq."L") then
         L_o=f
         L_e=e
-	spec(5)=1
+        spec(5)=1
      else
         read(lchr,*) ll
         if(ll.eq.0) then
@@ -267,7 +267,7 @@ real function userff (npar, data, myid)
     do i = 0, 3
        do j = 1, fr_obs(i)%n
           resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
-	  chisq_r = chisq_r + resid*resid
+          chisq_r = chisq_r + resid*resid
 !	  if(i.eq.0) print *,fr_obs(i)%nu(j),fr_mod(i)%nu(j),fr_cor(i)%nu(j),resid
        end do
     end do
