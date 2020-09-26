@@ -1,7 +1,7 @@
 ! Module   : em_lib
 ! Purpose  : main Embedded MESA module
 !
-! Copyright 2016-2018 Rich Townsend
+! Copyright 2016-2020 Rich Townsend
 
 $include 'core.inc'
 
@@ -9,6 +9,7 @@ module em_lib
 
   ! Uses
 
+  use core_parallel
   use core_system
 
   use em_gyre
@@ -102,6 +103,7 @@ contains
     call clear_obs_freqs()
 
     call init_math()
+    call init_parallel()
 
     ! Finish
 
