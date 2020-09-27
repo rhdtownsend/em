@@ -267,7 +267,7 @@ real function userff (npar, data, myid)
        do j = 1, fr_obs(i)%n
           resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
           chisq_r = chisq_r + resid*resid
-!	  if(i.eq.0) print *,fr_obs(i)%nu(j),fr_mod(i)%nu(j),fr_cor(i)%nu(j),resid
+          if(myid.eq.0) print *,i,fr_mod(i)%n_pg(j),fr_obs(i)%nu(j),fr_obs(i)%dnu(j),fr_cor(i)%nu(j),resid
        end do
     end do
   
