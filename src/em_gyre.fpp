@@ -351,7 +351,7 @@ contains
 
     allocate(md(d_md))
 
-    call bracket_search(bp, omega, omega_min, omega_max, process_mode, nm_p)
+    call bracket_search(bp, omega, omega_min, omega_max, nm_p, process_mode)
 
     ! Resize the md array just to the modes found
 
