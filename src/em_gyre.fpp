@@ -248,7 +248,7 @@ contains
 
     os_p = osc_par_t(x_ref=1._dp, &
                      outer_bound='JCD', &
-                     inertia_norm='RADIAL', &
+                     inertia_norm='BOTH', &
                      alpha_rht=1._DP)
 
     ! Rotation
