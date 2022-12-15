@@ -25,6 +25,7 @@ module em_lib
   use atm_lib
   use eos_lib
   use interp_1d_lib
+  use other_extras
 
   use atm_support
 
@@ -223,6 +224,9 @@ contains
 
     s%terminal_interval = 0
 
+    call star_set_profile_columns(id, '', .FALSE., ierr)
+    $ASSERT(ierr == 0,Failure in star_set_profile_columns)
+
     ! Include the atmosphere as part of the interior
     ! More stable but implies Eddington T(tau) relation
     s% job% set_to_this_tau_factor = 1.5d-4
@@ -246,7 +250,17 @@ contains
 
     ! Set up procedure hooks
 
-    s%extras_check_model => null()
+    s%extras_startup => null_extras_startup
+    s%extras_check_model => null_extras_check_model
+    s%extras_start_step => null_extras_start_step
+    s%extras_finish_step => null_extras_finish_step
+    s%extras_after_evolve => null_extras_after_evolve
+    s%how_many_extra_history_columns => null_how_many_extra_history_columns
+    s%data_for_extra_history_columns => null_data_for_extra_history_columns
+    s%how_many_extra_profile_columns => null_how_many_extra_profile_columns
+    s%data_for_extra_profile_columns => null_data_for_extra_profile_columns
+
+    s%warn_run_star_extras = .FALSE.
     
     ! Set up the optical depth at the atmosphere base (this appears
     ! here because we don't use do_star_job_controls_before)
