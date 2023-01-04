@@ -171,6 +171,7 @@ contains
 
     ! Set up controls (by passing an empty filename, no inlist will be
     ! read, but defaults are set)
+
     call star_setup(id, '', ierr)
     $ASSERT(ierr == 0,Failed in star_steup)
 
@@ -205,18 +206,22 @@ contains
     f0_ov_div_f_ov = 1._dp
 
     if (f_ov > 0._dp) then
-       s% overshoot_f0 = f0_ov_div_f_ov*f_ov
-       s% overshoot_f = f_ov
-       s% overshoot_scheme = 'exponential'
-       s% overshoot_zone_type = 'any'
-       s% overshoot_zone_loc = 'any'
-       s% overshoot_bdy_loc ='any'
+       s%overshoot_f0 = f0_ov_div_f_ov*f_ov
+       s%overshoot_f = f_ov
+       s%overshoot_scheme = 'exponential'
+       s%overshoot_zone_type = 'any'
+       s%overshoot_zone_loc = 'any'
+       s%overshoot_bdy_loc ='any'
     end if
     
     ! Output controls
 
     s%write_profiles_flag = .FALSE.
     s%do_history_file = .FALSE.
+
+    s%job%write_profile_when_terminate = .TRUE.
+    s%job%filename_for_profile_when_terminate = 'profile_final.data'
+
     s%photo_interval = 0
 
     s%log_directory = '.'
@@ -224,15 +229,18 @@ contains
 
     s%terminal_interval = 0
 
+    call star_set_history_columns(id, '', .FALSE., ierr)
+    $ASSERT(ierr == 0,Failure in star_set_history_columns)
+
     call star_set_profile_columns(id, '', .FALSE., ierr)
     $ASSERT(ierr == 0,Failure in star_set_profile_columns)
 
     ! Include the atmosphere as part of the interior
     ! More stable but implies Eddington T(tau) relation
-    s% job% set_to_this_tau_factor = 1.5d-4
-    s% job% set_tau_factor = .TRUE.
-    s% job% set_initial_tau_factor = .TRUE.
-    s% tau_factor = 1.5d-4
+    s%job% set_to_this_tau_factor = 1.5d-4
+    s%job% set_tau_factor = .TRUE.
+    s%job% set_initial_tau_factor = .TRUE.
+    s%tau_factor = 1.5d-4
     ! s% job% relax_to_this_tau_factor = 1.5d-4
     ! s% job% dlogtau_factor = 0.1d0
     ! s% job% relax_tau_factor = .TRUE.
@@ -260,7 +268,7 @@ contains
     s%how_many_extra_profile_columns => null_how_many_extra_profile_columns
     s%data_for_extra_profile_columns => null_data_for_extra_profile_columns
 
-    s%warn_run_star_extras = .FALSE.
+    s%job%warn_run_star_extras = .FALSE.
     
     ! Set up the optical depth at the atmosphere base (this appears
     ! here because we don't use do_star_job_controls_before)
@@ -544,6 +552,15 @@ contains
 
     if (t_code == t_extras_check_model .OR. &
         t_code == t_log_g_lower_limit) t_code = t_ok
+
+    ! (Possibly) save the final profile
+    
+    if (s% job% write_profile_when_terminate) then
+       call star_write_profile_info( &
+            id, s% job% filename_for_profile_when_terminate, &
+            ierr)
+       $ASSERT(ierr == 0,Failure in star_write_profile_info)
+    end if
 
     ! Reset controls
 
