@@ -45,11 +45,13 @@ module em_lib
   type(freq_t), save :: fr_mod_m(0:3) ! Model frequencies
   type(freq_t), save :: fr_cor_m(0:3) ! Model frequencies
 
-  character(64), save :: state_m     ! State-machine state
-  real(dp), save      :: f_enter_m   ! Threshold for entering GYRE calcs
-  real(dp), save      :: f_exit_m    ! Threshold for exiting GYRE calcs
-  real(dp), save      :: y_tol_m     ! Frequency convergence tolerance
-  real(dp), save      :: dt_frac_m   ! Timestep limit fraction
+  character(64), save       :: state_m                 ! State-machine state
+  real(dp), save            :: f_enter_m               ! Threshold for entering GYRE calcs
+  real(dp), save            :: f_exit_m                ! Threshold for exiting GYRE calcs
+  real(dp), save            :: y_tol_m                 ! Frequency convergence tolerance
+  real(dp), save            :: dt_frac_m               ! Timestep limit fraction
+  character(:), allocatable :: best_profile_filename_m ! Filename of profile file for best model
+
 
   real(dp), save :: Teff_m  ! Effective temperature of best model
   real(dp), save :: logg_m  ! Surface gravity of best model
@@ -219,7 +221,7 @@ contains
     s%write_profiles_flag = .FALSE.
     s%do_history_file = .FALSE.
 
-    s%job%write_profile_when_terminate = .TRUE.
+    s%job%write_profile_when_terminate = .FALSE.
     s%job%filename_for_profile_when_terminate = 'profile_final.data'
 
     s%photo_interval = 0
@@ -480,15 +482,16 @@ contains
 
   !****
 
-  subroutine evolve_star_seismic (id, t_code, f_enter, f_exit, y_tol, dt_frac, log_g_min)
+  subroutine evolve_star_seismic (id, t_code, f_enter, f_exit, y_tol, dt_frac, log_g_min, best_profile_filename)
 
-    integer, intent(in)            :: id
-    integer, intent(out)           :: t_code
-    real(dp), intent(in), optional :: f_enter
-    real(dp), intent(in), optional :: f_exit
-    real(dp), intent(in), optional :: y_tol
-    real(dp), intent(in), optional :: dt_frac
-    real(dp), intent(in), optional :: log_g_min
+    integer, intent(in)                :: id
+    integer, intent(out)               :: t_code
+    real(dp), intent(in), optional     :: f_enter
+    real(dp), intent(in), optional     :: f_exit
+    real(dp), intent(in), optional     :: y_tol
+    real(dp), intent(in), optional     :: dt_frac
+    real(dp), intent(in), optional     :: log_g_min
+    character(*), intent(in), optional :: best_profile_filename
 
     type(star_info), pointer                        :: s
     integer                                         :: ierr
@@ -520,6 +523,12 @@ contains
     else
        dt_frac_m = 0.1_dp
     endif
+
+    if (PRESENT(best_profile_filename)) then
+       best_profile_filename_m = best_profile_filename
+    else
+       best_profile_filename_m = ''
+    end if
 
     ! Clear fit data
 
@@ -1533,6 +1542,15 @@ contains
     L_m = s%photosphere_L
     age_m = s%star_age
     Rcz_m = s%conv_mx1_bot_r
+
+    ! Optionally write out the model
+
+    if (best_profile_filename_m /= '') then
+       call star_write_profile_info( &
+            id, best_profile_filename_m, &
+            ierr)
+       $ASSERT(ierr == 0,Failure in star_write_profile_info)
+    end if
 
     ! Finish
 

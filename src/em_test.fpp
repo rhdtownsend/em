@@ -83,7 +83,7 @@ program em_test
 
   ! Evolve it until seismic constraints are met
 
-  call evolve_star_seismic(id, t_code)
+  call evolve_star_seismic(id, t_code, best_profile_filename='profile_best.data')
 
   if (t_code == t_ok) then
      print *,'Evolve to seismic: OK'
