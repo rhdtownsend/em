@@ -1,0 +1,69 @@
+! Module  : util_m
+! Purpose : utility routines
+!
+! Copyright 2016 Rich Townsend
+
+#:include 'em.inc'
+
+module util_m
+
+   ! Uses
+
+   use forum_m, only: RD
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none
+
+   ! Access specifiers
+
+   private
+
+   public :: linear_fit
+
+contains
+
+   subroutine linear_fit(x, y, dy, a, b)
+
+      real(RD), intent(in)  :: x(:)
+      real(RD), intent(in)  :: y(:)
+      real(RD), intent(in)  :: dy(:)
+      real(RD), intent(out) :: a
+      real(RD), intent(out) :: b
+
+      real(RD) :: S
+      real(RD) :: S_x
+      real(RD) :: S_y
+      real(RD) :: S_xx
+      real(RD) :: S_xy
+      real(RD) :: Delta
+
+      @:CHECK_BOUNDS(SIZE(y), SIZE(x))
+      @:CHECK_BOUNDS(SIZE(dy), SIZE(x))
+
+      ! Set up fitting sums
+
+      S = SUM(1._RD/dy**2)
+
+      S_x = SUM(x/dy**2)
+      S_y = SUM(y/dy**2)
+
+      S_xx = SUM(x**2/dy**2)
+      S_xy = SUM(x*y/dy**2)
+
+      ! Calculate the fit
+
+      Delta = S*S_xx - S_x**2
+
+      a = (S_xx*S_y - S_x*S_xy)/Delta
+      b = (S*S_xy - S_x*S_y)/Delta
+
+      ! Finish
+
+      return
+
+   end subroutine linear_fit
+
+end module util_m

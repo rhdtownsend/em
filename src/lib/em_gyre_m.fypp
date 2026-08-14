@@ -1,0 +1,380 @@
+! Module  : em_gyre
+! Purpose : interface between GYRE and EM
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'em.inc'
+
+module em_gyre_m
+
+   ! Uses
+
+   use forum_m, only: RD, reallocate
+   use gyre_m
+
+   use freq_m
+   use util_m
+
+   use star_lib
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none
+
+   ! Access specifiers
+
+   private
+
+   public :: run_gyre
+
+contains
+
+   subroutine run_gyre(id, l, fr_obs, fr_mod)
+
+      integer, intent(in)       :: id
+      integer, intent(in)       :: l
+      type(freq_t), intent(in)  :: fr_obs
+      type(freq_t), intent(out) :: fr_mod
+
+      type(star_info), pointer      :: s
+      integer                       :: ierr
+      real(RD)                      :: freq_min
+      real(RD)                      :: freq_max
+      integer                       :: n_freq
+      type(model_par_t)             :: ml_p
+      type(mode_par_t)              :: md_p
+      type(osc_par_t)               :: os_p
+      type(rot_par_t)               :: rt_p
+      type(num_par_t)               :: nm_p
+      type(grid_par_t)              :: gr_p
+      type(scan_par_t), allocatable :: sc_p(:)
+      type(evol_model_t), target    :: ml
+      type(context_t), target       :: cx
+      type(mode_t), allocatable     :: md(:)
+      integer                       :: n_md
+      integer                       :: i_md
+
+      ! Get the star pointer
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      ! Set frequency bounds
+
+      freq_min = fr_obs%nu(1) - 1.5_RD*s%delta_nu
+      freq_max = fr_obs%nu(fr_obs%n) + 1.5_RD*s%delta_nu
+      n_freq = CEILING(5._RD*(freq_max - freq_min)/s%delta_nu)
+
+      ! Set up parameters
+
+      call set_gyre_pars_(l, freq_min, freq_max, n_freq, 'UHZ', ml_p, md_p, os_p, rt_p, nm_p, gr_p, sc_p)
+
+      ! Make the model
+
+      call make_gyre_model_(id, ml_p, ml)
+
+      ! Find modes
+
+      call find_gyre_modes_(ml, md_p, os_p, rt_p, nm_p, gr_p, sc_p, cx, md)
+
+      ! Store data
+
+      n_md = SIZE(md)
+
+      fr_mod = freq_t([(REAL(md(i_md)%freq('UHZ', 'INERTIAL')), i_md=1,n_md)], &
+         [(1._RD, i_md=1,n_md)], &
+         [(md(i_md)%E_norm(), i_md=1,n_md)], &
+         md%n_pg)
+
+      ! Finish
+
+      return
+
+   end subroutine run_gyre
+
+   !****
+
+   subroutine make_gyre_model_(id, ml_p, ml)
+
+      integer, intent(in)             :: id
+      type(model_par_t), intent(in)   :: ml_p
+      type(evol_model_t), intent(out) :: ml
+
+      real(RD), allocatable :: global_data(:)
+      real(RD), allocatable :: point_data(:,:)
+      integer               :: ierr
+      integer               :: n
+      real(RD), allocatable :: x(:)
+      real(RD), allocatable :: V_2(:)
+      real(RD), allocatable :: As(:)
+      real(RD), allocatable :: U(:)
+      real(RD), allocatable :: c_1(:)
+      real(RD), allocatable :: Omega_rot(:)
+
+      ! Get the global and point data
+
+      call star_get_pulse_data(id, 'GYRE', &
+         add_center_point=.TRUE., &
+         keep_surface_point=.TRUE., &
+         add_atmosphere=.FALSE., &
+         !         add_atmosphere=.TRUE., &
+         global_data=global_data, &
+         point_data=point_data, &
+         ierr=ierr)
+      @:ASSERT(ierr == 0, 'failed in star_get_pulse_data')
+
+      ! Make the model_t
+
+      associate ( &
+         M_star => global_data(1), &
+         R_star => global_data(2), &
+         L_star => global_data(3), &
+         r => point_data(1,:), &
+         M_r => point_data(2,:), &
+         L => point_data(3,:), &
+         P => point_data(4,:), &
+         T => point_data(5,:), &
+         rho => point_data(6,:), &
+         N2 => point_data(8,:), &
+         Gamma_1 => point_data(9,:))
+
+         ! Calculate dimensionless structure data
+
+         x = r/R_star
+
+         n = SIZE(x)
+
+         allocate(V_2(n))
+         allocate(As(n))
+         allocate(U(n))
+         allocate(c_1(n))
+         allocate(Omega_rot(n))
+
+         where (x /= 0._RD)
+            V_2 = G_GRAVITY*M_r*rho/(P*r*x**2)
+            As = r**3*N2/(G_GRAVITY*M_r)
+            U = 4._RD*PI*rho*r**3/M_r
+            c_1 = (r/R_star)**3/(M_r/M_star)
+         elsewhere
+            V_2 = 4._RD*PI*G_GRAVITY*rho(1)**2*R_star**2/(3._RD*P(1))
+            As = 0._RD
+            U = 3._RD
+            c_1 = 3._RD*(M_star/R_star**3)/(4._RD*PI*rho)
+         end where
+
+         Omega_rot = 0._RD
+
+         ml = evol_model_t(x, M_star, R_star, L_star, ml_p)
+
+         call ml%define(I_V_2, V_2)
+         call ml%define(I_AS, As)
+         call ml%define(I_U, U)
+         call ml%define(I_C_1, c_1)
+
+         call ml%define(I_GAMMA_1, Gamma_1)
+
+         call ml%define(I_OMEGA_ROT, Omega_rot)
+
+         call ml%commit()
+
+      end associate
+
+      ! Finish
+
+   end subroutine make_gyre_model_
+
+   !****
+
+   subroutine set_gyre_pars_(l, freq_min, freq_max, n_freq, freq_units, ml_p, md_p, os_p, rt_p, nm_p, gr_p, sc_p)
+
+      integer, intent(in)                        :: l
+      real(RD), intent(in)                       :: freq_min
+      real(RD), intent(in)                       :: freq_max
+      integer, intent(in)                        :: n_freq
+      character(*), intent(in)                   :: freq_units
+      type(model_par_t), intent(out)             :: ml_p
+      type(mode_par_t), intent(out)              :: md_p
+      type(osc_par_t), intent(out)               :: os_p
+      type(rot_par_t), intent(out)               :: rt_p
+      type(num_par_t), intent(out)               :: nm_p
+      type(grid_par_t), intent(out)              :: gr_p
+      type(scan_par_t), allocatable, intent(out) :: sc_p(:)
+
+      ! Set up parameters for a GYRE run
+
+      ! Model
+
+      ml_p = model_par_t(add_center=.FALSE., &
+         repair_As=.TRUE.)
+
+      ! Mode
+
+      md_p = mode_par_t(l=l, &
+         m=0)
+
+      ! Oscillation
+
+      os_p = osc_par_t(x_ref=1._RD, &
+         outer_bound='JCD', &
+         inertia_norm='BOTH', &
+         alpha_rht=1._RD)
+
+      ! Rotation
+
+      rt_p = rot_par_t()
+
+      ! Numerical
+
+      nm_p = num_par_t(diff_scheme='COLLOC_GL4')
+
+      ! Grid (the first setting is preferable, but can lead to huge
+      ! models. So, go with the second one for now)
+
+      !    gr_p = grid_par_t(w_osc=10._RD, &
+      !                      w_exp=2._RD, &
+      !                      w_ctr=10._RD)
+
+      gr_p = grid_par_t(w_ctr=10._RD)
+
+      ! Scan
+
+      allocate(sc_p(1))
+
+      sc_p(1) = scan_par_t(freq_min=freq_min, &
+         freq_max=freq_max, &
+         n_freq=n_freq, &
+         freq_min_units=freq_units, &
+         freq_max_units=freq_units, &
+         freq_frame='INERTIAL', &
+         grid_type='LINEAR', &
+         grid_frame='INERTIAL')
+
+      ! Finish
+
+      return
+
+   end subroutine set_gyre_pars_
+
+   !****
+
+   subroutine find_gyre_modes_(ml, md_p, os_p, rt_p, nm_p, gr_p, sc_p, cx, md)
+
+      type(evol_model_t), pointer, intent(in) :: ml
+      type(mode_par_t), intent(in)            :: md_p
+      type(osc_par_t), intent(in)             :: os_p
+      type(rot_par_t), intent(in)             :: rt_p
+      type(num_par_t), intent(in)             :: nm_p
+      type(grid_par_t), intent(in)            :: gr_p
+      type(scan_par_t), intent(in)            :: sc_p(:)
+      type(context_t), target, intent(out)    :: cx
+      type(mode_t), allocatable, intent(out)  :: md(:)
+
+      real(RD), allocatable         :: omega(:)
+      type(grid_t)                  :: gr
+      real(RD)                      :: omega_min
+      real(RD)                      :: omega_max
+      class(bvp_rt), allocatable    :: bp
+      class(sysmtx_rt), allocatable :: sm
+      integer                       :: n_md
+      integer                       :: d_md
+
+      ! Create the scaffold grid
+
+      gr = grid_t(ml, gr_p)
+
+      ! Set up the context
+
+      cx = context_t(ml, gr, md_p, os_p, rt_p)
+
+      ! Set up the frequency array
+
+      call build_scan(cx, md_p, os_p, sc_p, 'REAL', omega)
+
+      ! Refine the grid
+
+      call refine_grid(gr, cx, omega, gr_p, os_p)
+
+      if (gr%n > 25000) stop 'Grid exceeded hard-wired size limit of 25,000 points'
+
+      ! Set frequency bounds and perform checks
+
+      if (nm_p%restrict_roots) then
+         omega_min = MINVAL(omega)
+         omega_max = MAXVAL(omega)
+      else
+         omega_min = -HUGE(0._RD)
+         omega_max = HUGE(0._RD)
+      endif
+
+      call check_scan(cx, gr, omega, md_p, os_p)
+
+      ! Create the bvp_t and sysmtx_t
+
+      if (md_p%l == 0 .AND. os_p%reduce_order) then
+         bp = rad_bvp_t(cx, gr, md_p, nm_p, os_p)
+      else
+         bp = ad_bvp_t(cx, gr, md_p, nm_p, os_p)
+      endif
+
+      #:if defined('GFORTRAN_PR110877')
+         allocate(sm, SOURCE=sysmtx_rt(bp, nm_p%ad_matrix_solver))
+      #:else
+         sm = sysmtx_rt(bp, nm_p%ad_matrix_solver)
+      #:endif
+
+      ! Find modes
+
+      n_md = 0
+      d_md = 16
+
+      allocate(md(d_md))
+
+      call bracket_search(bp, sm, omega, omega_min, omega_max, nm_p, process_mode_)
+
+      ! Resize the md array just to the modes found
+
+      md = md(:n_md)
+
+      ! Finish (these explicit deallocation shouldn't be necessary, but
+      ! without it valgrind complains)
+
+      deallocate(sm)
+      deallocate(bp)
+
+      return
+
+   contains
+
+      subroutine process_mode_(md_new, culled)
+
+         type(mode_t), intent(in) :: md_new
+         logical, intent(out)     :: culled
+
+         ! Process the mode
+
+         culled = md_new%n_pg < md_p%n_pg_min .OR. md_new%n_pg > md_p%n_pg_max
+
+         if (culled) return
+
+         ! Store it
+
+         n_md = n_md + 1
+
+         if (n_md > d_md) then
+            d_md = 2*d_md
+            call reallocate(md, [d_md])
+         endif
+
+         md(n_md) = md_new
+
+         ! Finish
+
+         return
+
+      end subroutine process_mode_
+
+   end subroutine find_gyre_modes_
+
+end module em_gyre_m

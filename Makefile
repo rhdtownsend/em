@@ -1,0 +1,82 @@
+# File     : Makefile
+# Purpose  : top-level makefile
+
+# Build frontend executables
+FRONTENDS ?= yes
+
+# Path to GYRE installation
+GYRE_DIR ?= $(HOME)/gyre-9.1.1
+
+# Enable debugging (with a performance penalty)
+DEBUG ?= no
+
+# Build & link against shared libraries (with a possible performance
+# penalty)
+SHARED ?= yes
+
+# Enable OpenMP parallelization
+OMP ?= yes
+
+# Enable FPE checks
+FPE ?= yes
+
+# Enable correctly rounded math functions
+CRMATH ?= yes
+
+# Enable portable math for bit-for-bit reproducibility (with a
+# possible performance penalty)
+PORTABLE ?= yes
+
+# Use IEEE fortran features
+IEEE ?= yes
+
+############ DO NOT EDIT BELOW THIS LINE ############
+### (unless you think you know what you're doing) ###
+#####################################################
+
+# Export options
+
+export FRONTENDS
+export GYRE_DIR
+export DEBUG
+export SHARED
+export OMP
+export FPE
+export CRMATH
+export PORTABLE
+export IEEE
+
+# General make settings
+
+export SH = /bin/bash
+export MAKEFLAGS += --no-print-directory
+
+# Paths
+
+export BIN_DIR ?= $(CURDIR)/bin
+export LIB_DIR ?= $(CURDIR)/lib
+export PKG_DIR ?= $(LIB_DIR)/pkgconfig
+export INC_DIR ?= $(CURDIR)/include
+
+export SRC_DIR := $(CURDIR)/src
+export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/include $(SRC_DIR)/frontend
+
+# Rules
+
+install : build | $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
+	@$(MAKE) -C build $@
+
+build :
+	@$(MAKE) -C build $@
+
+clean :
+	@$(MAKE) -C build $@
+	@rm -rf $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
+
+check_src :
+	@$(MAKE) -C build $@
+
+.PHONY: install build clean check_src
+
+$(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR) :
+	@mkdir -p $@
