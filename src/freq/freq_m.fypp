@@ -1,0 +1,671 @@
+! Module  : freq_m
+! Purpose : frequency data storage & manipulation
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'em.inc'
+
+module freq_m
+
+   ! Uses
+
+   use forum_m, only: RD, sort_indices
+
+   use interp_1d_lib, only: interpolate_vector, interp_pm
+
+   use utils_m
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none
+
+   ! Parameter definitions
+
+   integer, parameter :: L_MAX = 3
+
+   ! Derived-type definitions
+
+   type :: freq_t
+      real(RD), allocatable :: nu(:)
+      real(RD), allocatable :: dnu(:)
+      integer, allocatable  :: n_pg(:)
+      real(RD), allocatable :: E_norm(:)
+      integer               :: n = 0
+   contains
+      private
+      procedure, public :: Delta_nu
+   end type freq_t
+
+   ! Module variables
+
+   type(freq_t), save :: fr_obs_m(0:L_MAX) ! Observed frequencies
+   type(freq_t), save :: fr_mod_m(0:L_MAX) ! Raw model frequencies
+
+   ! Interfaces
+
+   interface freq_t
+      module procedure freq_t_
+   end interface freq_t
+
+   ! Access specifiers
+
+   private
+
+   public :: L_MAX
+   public :: freq_t
+   public :: set_obs_freqs
+   public :: set_mod_freqs
+   public :: get_obs_freqs
+   public :: get_mod_freqs
+   public :: chi2_radial
+   public :: apply_cubic_correction
+   public :: apply_combined_correction
+
+contains
+
+   function freq_t_(nu, dnu, E_norm, n_pg) result(fr)
+
+      real(RD), intent(in) :: nu(:)
+      real(RD), intent(in) :: dnu(:)
+      real(RD), intent(in) :: E_norm(:)
+      integer, intent(in)  :: n_pg(:)
+      type(freq_t)         :: fr
+
+      integer :: i(SIZE(nu))
+
+      @:CHECK_BOUNDS(SIZE(dnu), SIZE(nu))
+      @:CHECK_BOUNDS(SIZE(E_norm), SIZE(nu))
+      @:CHECK_BOUNDS(SIZE(n_pg), SIZE(nu))
+
+      ! Construct the freq_t
+
+      i = sort_indices(nu)
+
+      fr%nu = nu(i)
+      fr%dnu = dnu(i)
+
+      fr%E_norm = E_norm(i)
+
+      fr%n_pg = n_pg(i)
+
+      fr%n = SIZE(nu)
+
+      ! Finish
+
+      return
+
+   end function freq_t_
+
+   !****
+
+   function Delta_nu(fr)
+
+      class(freq_t), intent(in) :: fr
+      real(RD)                  :: Delta_nu
+
+      real(RD) :: a
+      real(RD) :: b
+
+      ! Determine Delta_nu using a linear fit
+
+      call linear_fit(REAL(fr%n_pg, RD), fr%nu, fr%dnu, a, b)
+
+      Delta_nu = b
+
+      ! Finish
+
+      return
+
+   end function Delta_nu
+
+   !****
+
+   subroutine set_obs_freqs(l, fr)
+
+      integer, intent(in)      :: l
+      type(freq_t), intent(in) :: fr
+
+      ! Set observational frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr_obs_m(l) = fr
+
+      ! Finish
+
+      return
+
+   end subroutine set_obs_freqs
+
+   !****
+
+   subroutine set_mod_freqs(l, fr)
+
+      integer, intent(in)      :: l
+      type(freq_t), intent(in) :: fr
+
+      ! Set model frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr_mod_m(l) = fr
+
+      ! Finish
+
+      return
+
+   end subroutine set_mod_freqs
+
+   !****
+
+   function get_obs_freqs(l) result(fr)
+
+      integer, intent(in) :: l
+      type(freq_t)        :: fr
+
+      ! Get observational frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr = fr_obs_m(l)
+
+      ! Finish
+
+      return
+
+   end function get_obs_freqs
+
+   !****
+
+   function get_mod_freqs(l) result(fr)
+
+      integer, intent(in) :: l
+      type(freq_t)        :: fr
+
+      ! Get model frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr = fr_mod_m(l)
+
+      ! Finish
+
+      return
+
+   end function get_mod_freqs
+
+   !****
+
+   subroutine chi2_radial(fr_mod, fr_obs, chi2)
+
+      type(freq_t), intent(in) :: fr_mod(0:3)
+      type(freq_t), intent(in) :: fr_obs(0:3)
+      real(RD), intent(out)    :: chi2
+      integer                  :: i
+
+      chi2 = 0d0
+      do i = 1, fr_obs(0)%n
+         chi2 = chi2 + (fr_mod(0)%nu(i)-fr_obs(0)%nu(i))**2/fr_obs(0)%dnu(i)**2
+      end do
+
+   end subroutine chi2_radial
+
+   !****
+
+   subroutine apply_cubic_correction(fr_mod, fr_obs, fr_cor)
+
+      type(freq_t), intent(in)  :: fr_mod(0:3)
+      type(freq_t), intent(in)  :: fr_obs(0:3)
+      type(freq_t), intent(out) :: fr_cor(0:3)
+
+      real(RD) :: X, y, XtX, Xty
+      integer  :: i, l
+      real(RD) :: a3 ! Coefficient of cubic term
+
+      call match_modes_(fr_mod, fr_obs, fr_cor)
+
+      XtX = 0._RD
+      Xty = 0._RD
+      X = 0._RD
+      y = 0._RD
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            X = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
+
+            XtX = XtX + X*X
+            Xty = Xty + X*y
+         end do
+      end do
+
+      a3 = Xty/XtX
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + a3*fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)
+         end do
+      end do
+
+   end subroutine apply_cubic_correction
+
+   !****
+
+   subroutine apply_combined_correction(fr_mod, fr_obs, fr_cor)
+
+      type(freq_t), intent(in)  :: fr_mod(0:3)
+      type(freq_t), intent(in)  :: fr_obs(0:3)
+      type(freq_t), intent(out) :: fr_cor(0:3)
+
+      real(RD) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
+      integer  :: i, l
+      real(RD) :: a1 ! Coefficient of inverse term
+      real(RD) :: a3 ! Coefficient of cubic term
+
+      call match_modes_(fr_mod, fr_obs, fr_cor)
+
+      XtX = 0._RD
+      Xty = 0._RD
+      X = 0._RD
+      y = 0._RD
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            X(1) = fr_cor(l)%nu(i)**(-1)/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            X(2) = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
+
+            XtX(1,1) = XtX(1,1) + X(1)*X(1)
+            XtX(1,2) = XtX(1,2) + X(1)*X(2)
+            XtX(2,2) = XtX(2,2) + X(2)*X(2)
+            Xty(1) = Xty(1) + X(1)*y
+            Xty(2) = Xty(2) + X(2)*y
+         end do
+      end do
+
+      XtX(2,1) = XtX(1,2)
+
+      XtXi(1,1) = XtX(2,2)
+      XtXi(2,2) = XtX(1,1)
+      XtXi(1,2) = -XtX(1,2)
+      XtXi(2,1) = -XtX(2,1)
+
+      detXtX = XtX(1,1)*XtX(2,2) - XtX(1,2)*XtX(2,1)
+      XtXi = XtXi/detXtX
+
+      a1 = XtXi(1,1)*Xty(1) + XtXi(1,2)*Xty(2)
+      a3 = XtXi(2,1)*Xty(1) + XtXi(2,2)*Xty(2)
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + (a1*fr_cor(l)%nu(i)**(-1) + a3*fr_cor(l)%nu(i)**3) &
+               /fr_cor(l)%E_norm(i)
+         end do
+      end do
+
+   end subroutine apply_combined_correction
+
+   !****
+
+   subroutine get_r010_(fr, fr0, fr1, r010)
+
+      real(RD), intent(in)     :: fr(:)
+      type(freq_t), intent(in) :: fr0, fr1
+      real(RD), intent(out)    :: r010(:)
+
+      real(RD) :: Delta_nu
+      integer  :: i0, i1, end0, end1, i, n, l
+
+      ! parameters for interpolant
+      real(RD), allocatable :: x(:), y(:)
+      integer, parameter    :: nwork = 6
+      real(RD), pointer     :: work1(:)
+      character(len=256)    :: interp_dbg_str
+      integer               :: ierr
+
+      r010 = 0d0
+
+      Delta_nu = fr0%Delta_nu()
+
+      i0 = 1
+      i1 = 1
+
+      do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
+         i0 = i0 + 1
+      end do
+
+      do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
+         i1 = i1 + 1
+      end do
+
+      end0 = fr0%n
+      end1 = fr1%n
+
+      do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
+         end0 = end0 - 1
+      end do
+
+      do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
+         end1 = end1 - 1
+      end do
+
+      !    number of l=0         number of l=1
+      n = (end0 - i0 + 1) + (end1 - i1 + 1) - 4
+      allocate(x(n), y(n))
+      x = 0d0
+      y = 0d0
+
+      ! write(*,*) 'i0, i1 =', i0, i1
+      ! write(*,*) 'fr0(i0), fr1(i1) =', fr0%nu(i0), fr1%nu(i1)
+      ! write(*,*) 'end0, end1 =', end0, end1
+      ! write(*,*) 'fr0(end0), fr1(end1) =', fr0%nu(end0), fr1%nu(end1)
+      ! write(*,*) 'n =', n
+
+      l = 0
+      if (fr1%nu(i1) < fr0%nu(i0)) l = 1
+
+      do i = 1, n
+         if (l == 0) then
+            Delta_nu = fr1%nu(i1+1) - fr1%nu(i1)
+            x(i) = fr0%nu(i0+1)
+            y(i) = (fr0%nu(i0) - 4d0*fr1%nu(i1) + 6d0*fr0%nu(i0+1) &
+               - 4d0*fr1%nu(i1+1) + fr0%nu(i0+2))/8d0/Delta_nu
+            l = 1
+            i0 = i0 + 1
+         else if (l == 1) then
+            Delta_nu = fr0%nu(i0+1) - fr0%nu(i0)
+            x(i) = fr1%nu(i1+1)
+            y(i) = -(fr1%nu(i1) - 4d0*fr0%nu(i0) + 6d0*fr1%nu(i1+1) &
+               - 4d0*fr0%nu(i0+1) + fr1%nu(i1+2))/8d0/Delta_nu
+            l = 0
+            i1 = i1 + 1
+         else
+            stop 'l /= 0 or 1 in get_r010'
+         end if
+      end do
+
+      allocate(work1(nwork*size(x)))
+      call interpolate_vector(n, x, size(fr), fr, y, r010, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+      deallocate(work1, x, y)
+
+   end subroutine get_r010_
+
+   !****
+
+   subroutine get_r02_(fr, fr0, fr1, fr2, r02)
+
+      real(RD), intent(in)     :: fr(:)
+      type(freq_t), intent(in) :: fr0, fr1, fr2
+      real(RD)                 :: r02(:)
+
+      real(RD) :: Delta_nu
+      integer  :: i0, i1, i2, end0, end1, end2, i, n
+
+      ! parameters for interpolant
+      real(RD), allocatable :: x(:), y(:)
+      integer, parameter    :: nwork = 6
+      real(RD), pointer     :: work1(:)
+      character(len=256)    :: interp_dbg_str
+      integer               :: ierr
+
+      r02 = 0d0
+
+      Delta_nu = fr0%Delta_nu()
+
+      i0 = 1
+      i1 = 1
+      i2 = 1
+
+      do while (fr0%nu(i0) < fr1%nu(i1))
+         i0 = i0 + 1
+      end do
+
+      do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
+         i1 = i1 + 1
+      end do
+
+      do while (fr2%nu(i2) < fr1%nu(i1))
+         i2 = i2 + 1
+      end do
+
+      end0 = fr0%n
+      end1 = fr1%n
+      end2 = fr2%n
+
+      do while (fr0%nu(end0) > fr1%nu(end1))
+         end0 = end0 - 1
+      end do
+
+      do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
+         end1 = end1 - 1
+      end do
+
+      do while (fr2%nu(end2) > fr1%nu(end1))
+         end2 = end2 - 1
+      end do
+
+      n = end2 - i2 + 1
+      allocate(x(n), y(n))
+      x = 0d0
+      y = 0d0
+
+      ! write(*,*) 'i0, i1, i2 =', i0, i1, i2
+      ! write(*,*) 'fr0(i0), fr1(i1), fr2(i2) =', fr0%nu(i0), fr1%nu(i1), fr2%nu(i2)
+      ! write(*,*) 'end0, end1 =', end0, end1, end2
+      ! write(*,*) 'fr0(end0), fr1(end1), fr2(end2) =', fr0%nu(end0), fr1%nu(end1), fr2%nu(end2)
+      ! write(*,*) 'n =', n
+
+      do i = 0, n-1
+         x(i+1) = fr0%nu(i0+i)
+         y(i+1) = (fr0%nu(i0+i)-fr2%nu(i2+i))/(fr1%nu(i1+i+1)-fr1%nu(i1+i))
+      end do
+
+      allocate(work1(nwork*size(x)))
+      call interpolate_vector(n, x, size(fr), fr, y, r02, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+      deallocate(work1, x, y)
+
+   end subroutine get_r02_
+
+   !****
+
+   subroutine get_r13_(fr, fr0, fr1, fr3, r13)
+
+      real(RD), intent(in)     :: fr(:)
+      type(freq_t), intent(in) :: fr0, fr1, fr3
+      real(RD)                 :: r13(:)
+
+      real(RD) :: Delta_nu
+      integer  :: i0, i1, i3, end0, end1, end3, i, n
+
+      ! parameters for interpolant
+      real(RD), allocatable :: x(:), y(:)
+      integer, parameter    :: nwork = 6
+      real(RD), pointer     :: work1(:)
+      character(len=256)    :: interp_dbg_str
+      integer               :: ierr
+
+      r13 = 0d0
+
+      Delta_nu = fr0%Delta_nu()
+
+      i0 = 1
+      i1 = 1
+      i3 = 1
+
+      do while (fr1%nu(i1) < fr0%nu(i0))
+         i1 = i1 + 1
+      end do
+
+      do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
+         i0 = i0 + 1
+      end do
+
+      do while (fr3%nu(i3) < fr0%nu(i0))
+         i3 = i3 + 1
+      end do
+
+      end0 = fr0%n
+      end1 = fr1%n
+      end3 = fr3%n
+
+      do while (fr1%nu(end1) > fr0%nu(end0))
+         end1 = end1 - 1
+      end do
+
+      do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
+         end0 = end0 - 1
+      end do
+
+      do while (fr3%nu(end3) > fr0%nu(end0))
+         end3 = end3 - 1
+      end do
+
+      n = end3 - i3 + 1
+      allocate(x(n), y(n))
+      x = 0d0
+      y = 0d0
+
+      ! write(*,*) 'i0, i1, i3 =', i0, i1, i3
+      ! write(*,*) 'fr0(i0), fr1(i1), fr3(i3) =', fr0%nu(i0), fr1%nu(i1), fr3%nu(i3)
+      ! write(*,*) 'end0, end1 =', end0, end1, end3
+      ! write(*,*) 'fr0(end0), fr1(end1), fr3(end3) =', fr0%nu(end0), fr1%nu(end1), fr3%nu(end3)
+      ! write(*,*) 'n =', n
+
+      do i = 0, n-1
+         x(i+1) = fr1%nu(i1+i)
+         y(i+1) = (fr1%nu(i1+i)-fr3%nu(i3+i))/(fr0%nu(i0+i+1)-fr0%nu(i0+i))
+      end do
+
+      allocate(work1(nwork*size(x)))
+      call interpolate_vector(n, x, size(fr), fr, y, r13, interp_pm, &
+         nwork, work1, interp_dbg_str, ierr)
+      deallocate(work1, x, y)
+
+   end subroutine get_r13_
+
+   !****
+
+   subroutine chi2_ratios_(n_r010, n_r02, n_r13, r_freq, r_obs, r_invcov, fr_mod, chi2)
+
+      type(freq_t), intent(in) :: fr_mod(0:3)
+      integer, intent(in)      :: n_r010, n_r02, n_r13
+      real(RD), intent(in)     :: r_freq(:), r_obs(:), r_invcov(:,:)
+      real(RD), intent(out)    :: chi2
+
+      real(RD), allocatable :: r_mod(:)
+      integer               :: n_r, i, j
+
+      n_r = n_r010 + n_r02 + n_r13
+      allocate(r_mod(n_r))
+      r_mod = 0d0
+
+      if (n_r010 > 0) call get_r010_(r_freq(1:n_r010), fr_mod(0), fr_mod(1), r_mod(1:n_r010))
+      if (n_r02 > 0) call get_r02_(r_freq(n_r010+1:n_r010+n_r02), &
+         fr_mod(0), fr_mod(1), fr_mod(2), r_mod(n_r010+1:n_r010+n_r02))
+      if (n_r13 > 0) call get_r13_(r_freq(n_r010+n_r02+1:n_r), &
+         fr_mod(0), fr_mod(1), fr_mod(3), r_mod(n_r010+n_r02+1:n_r))
+
+      chi2 = 0d0
+      ! write(*,*) '          i               r_freq                          r_mod                     r_obs'
+      do i = 1, n_r
+         ! write(*,*) i, r_freq(i), r_mod(i), r_obs(i)
+         do j = 1, n_r
+            chi2 = chi2 + (r_mod(i)-r_obs(i))*r_invcov(i,j)*(r_mod(j)-r_obs(j))
+         end do
+      end do
+
+      deallocate(r_mod)
+
+   end subroutine chi2_ratios_
+
+   !****
+
+   subroutine match_modes_(fr_mod, fr_obs, fr_cor)
+
+      ! ported from MESA, see
+      ! $MESA_DIR/star/astero/src/astero_support.f:set_to_closest
+      ! $MESA_DIR/star/astero/src/astero_support.f:find_closest
+
+      type(freq_t), intent(in)  :: fr_mod(0:3)
+      type(freq_t), intent(in)  :: fr_obs(0:3)
+      type(freq_t), intent(out) :: fr_cor(0:3)
+      integer                   :: l, i, j, j_prev, j_min_dist
+      real(RD)                  :: dist, min_dist
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_mod(l)%n < 1) cycle
+
+         fr_cor(l) = fr_obs(l)
+
+         j_prev = 0
+         do i = 1, fr_obs(l)%n
+            ! j = find_closest(fr_obs(l)*nu(i), j_prev)
+            min_dist = 1d99
+            j_min_dist = -1
+
+            !          do j = j_prev + 1, fr_mod(l)%n
+            do j = 1, fr_mod(l)%n
+               dist = ABS(fr_mod(l)%nu(j) - fr_obs(l)%nu(i))
+               if (j_min_dist <= 0 .or. dist < min_dist) then
+                  min_dist = dist
+                  j_min_dist = j
+               end if
+               if (fr_mod(l)%nu(j) > fr_obs(l)%nu(i)) exit
+            end do
+
+            j = j_min_dist
+
+            if (j <= 0) stop 'failed to match modes'
+
+            fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
+            fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
+            fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
+            j_prev = j
+         end do
+      end do
+
+   end subroutine match_modes_
+
+   !****
+
+   subroutine match_modes_old_(fr_mod, fr_obs, fr_cor)
+
+      ! match observed modes to model modes one by one
+      ! currently naive: just finds nearest mode
+
+      type(freq_t), intent(in)  :: fr_mod(0:3)
+      type(freq_t), intent(in)  :: fr_obs(0:3)
+      type(freq_t), intent(out) :: fr_cor(0:3)
+      integer                   :: i, j, l
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_mod(l)%n < 1) cycle
+
+         fr_cor(l) = fr_obs(l)
+
+         do i = 1, fr_obs(l)%n
+            j = MINLOC(ABS(fr_mod(l)%nu - fr_obs(l)%nu(i)), DIM=1)
+            fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
+            fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
+            fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
+         end do
+      end do
+   end subroutine match_modes_old_
+
+end module freq_m

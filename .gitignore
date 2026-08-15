@@ -3,5 +3,9 @@
 *~
 *.o
 *.mod
-*.smod
+
+bin
+lib
+include
+
 

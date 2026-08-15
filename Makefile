@@ -59,7 +59,8 @@ export PKG_DIR ?= $(LIB_DIR)/pkgconfig
 export INC_DIR ?= $(CURDIR)/include
 
 export SRC_DIR := $(CURDIR)/src
-export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/include $(SRC_DIR)/frontend
+export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/freq \
+                   $(SRC_DIR)/include $(SRC_DIR)/frontend
 
 # Rules
 

@@ -27,7 +27,7 @@ em_test_SRCS = em_test.fypp
 em_test_USES = $(libem_SRCS)
 em_test_LIBS = libem
 
-libem_SRCS = em_m.fypp em_gyre_m.fypp freq_m.fypp util_m.fypp
+libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freq_m.fypp utils_m.fypp
 
 # MESA stuff
 

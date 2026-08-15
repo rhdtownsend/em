@@ -1,0 +1,876 @@
+! Module  : em_mesa_m
+! Purpose : Interface between EM and MESA
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'em.inc'
+
+module em_mesa_m
+
+   ! Uses
+
+   use forum_m, only: RD
+
+   use star_data_def, only: star_info, &
+      keep_going, retry, redo, terminate, &
+      t_extras_check_model, t_max_age, t_log_g_lower_limit, t_Lnuc_div_L_zams_limit
+   use star_lib, only: alloc_star, free_star, star_ptr, read_star_job, star_create_pre_ms_model, &
+      star_evolve_step, star_check_model, star_prepare_to_redo, star_prepare_to_retry, &
+      star_finish_step, star_pick_next_timestep, star_set_history_columns, star_set_profile_columns, &
+      star_set_kap_and_eos_handles, star_setup, star_write_profile_info, starlib_init, starlib_shutdown, &
+      star_set_colors_handles
+   use atm_lib, only: atm_get_T_tau_base
+   use atm_support, only: get_T_tau_id
+   use other_extras, only: null_extras_startup, null_extras_check_model, null_extras_start_step, &
+      null_extras_finish_step, null_extras_after_evolve, null_how_many_extra_history_columns, &
+      null_data_for_extra_history_columns, null_how_many_extra_profile_columns, null_data_for_extra_profile_columns
+
+   use em_gyre_m
+   use freq_m
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none
+
+   ! Parameter definitions
+
+   integer, parameter :: t_ok = 0
+
+   ! Interfaces
+
+   ! This overload (see also evolve_star_seismic_legacy_ in em_m)
+   ! allows us to preserve the legacy interface for
+   ! evolve_star_seismic
+
+   interface evolve_star_seismic
+      module procedure evolve_star_seismic_process_
+   end interface evolve_star_seismic
+
+   ! Access specifiers
+
+   private
+
+   public :: create_star
+   public :: destroy_star
+   public :: evolve_star
+   public :: evolve_star_to_zams
+   public :: evolve_star_to_log_g
+   public :: evolve_star_seismic
+   public :: t_ok
+   public :: t_max_age
+   public :: starlib_shutdown
+   public :: star_write_profile_info
+
+contains
+
+   function create_star(M, Y, Z, alpha, f_ov, max_age) result(id)
+
+      real(RD), intent(in) :: M
+      real(RD), intent(in) :: Y
+      real(RD), intent(in) :: Z
+      real(RD), intent(in) :: alpha
+      real(RD), intent(in) :: f_ov
+      real(RD), intent(in) :: max_age
+      integer              :: id
+
+      integer                  :: ierr
+      type(star_info), pointer :: s
+      real(RD)                 :: f0_ov_div_f_ov
+      integer                  :: T_tau_id
+
+      ! Create a star with the specified initial parameters
+      ! mixing-length parameter
+
+      ! Allocate and initialize the star
+
+      call alloc_star(id, ierr)
+      @:ASSERT(ierr == 0, 'failed in alloc_star')
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      ! Set up job parameters (by passing an empty filename, no inlist
+      ! will be read, but defaults are set)
+
+      call read_star_job(s, '', ierr)
+      @:ASSERT(ierr == 0, 'failed in read_star_job')
+
+      ! Initialize starlib (okay to do extra calls on this)
+
+      call starlib_init(s, ierr)
+      @:ASSERT(ierr == 0, 'failed in starlib_init')
+
+      ! Set up handles
+
+      call star_set_kap_and_eos_handles(id, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_set_kap_and_eos_handles')
+
+      call star_set_colors_handles(id, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_set_colors_handles')
+
+      ! Set up controls (by passing an empty filename, no inlist will be
+      ! read, but defaults are set)
+
+      s%kap_rq%Zbase = 0.02_RD
+
+      call star_setup(id, '', ierr)
+      @:ASSERT(ierr == 0, 'failed in star_steup')
+
+      s%initial_mass = M
+      s%initial_y = Y
+      s%initial_Z = Z
+      s%mixing_length_alpha = alpha
+      s%max_age = max_age
+
+      s%num_cells_for_smooth_brunt_B = 0
+      s%add_double_points_to_pulse_data = .TRUE.
+      s%threshold_grad_mu_for_double_point = 1d0
+      s%max_number_of_double_points = 100
+
+      s%energy_eqn_option = 'dedt'
+      s%min_timestep_limit = 1d2
+      s%redo_limit = 20
+      ! s%max_years_for_timestep = 1d7
+
+      s%do_element_diffusion = .TRUE.
+      s%T_mix_limit = 1d4
+
+      s%diffusion_class_factor(:) = 1
+      if (M >= 1.1) s%diffusion_class_factor(:) = 12-10*M
+      if (M >= 1.2) s%diffusion_class_factor(:) = 0
+
+      ! s%varcontrol_target = 1D-4
+      ! s%mesh_delta_coeff = 0.5D0
+
+      ! (Note: this mirrors the code in star/astero/src/extras_support)
+
+      f0_ov_div_f_ov = 1._RD
+
+      if (f_ov > 0._RD) then
+         s%overshoot_f0 = f0_ov_div_f_ov*f_ov
+         s%overshoot_f = f_ov
+         s%overshoot_scheme = 'exponential'
+         s%overshoot_zone_type = 'any'
+         s%overshoot_zone_loc = 'any'
+         s%overshoot_bdy_loc ='any'
+      end if
+
+      ! Output controls
+
+      s%write_profiles_flag = .FALSE.
+      s%do_history_file = .FALSE.
+
+      s%job%write_profile_when_terminate = .FALSE.
+      s%job%filename_for_profile_when_terminate = 'profile_final.data'
+
+      s%photo_interval = 0
+
+      s%log_directory = '.'
+      s%photo_directory = '.'
+
+      s%terminal_interval = 0
+
+      ! Include the atmosphere as part of the interior
+      ! More stable but implies Eddington T(tau) relation
+
+      s%job%set_to_this_tau_factor = 1.5d-4
+      s%job%set_tau_factor = .TRUE.
+      s%job%set_initial_tau_factor = .TRUE.
+      s%tau_factor = 1.5d-4
+      ! s%job%relax_to_this_tau_factor = 1.5d-4
+      ! s%job%dlogtau_factor = 0.1d0
+      ! s%job%relax_tau_factor = .TRUE.
+
+      ! Add defaults explicitly to be safe
+
+      s%atm_option = 'T_tau'
+      s%atm_T_tau_relation = 'Eddington'
+      s%atm_T_tau_opacity = 'fixed'
+      s%atm_build_tau_outer = 1d-4
+
+      ! s%report_ierr = .TRUE.
+      ! s%report_hydro_solver_progress = .TRUE.
+      ! s%report_bad_negative_xa = .TRUE.
+      ! s%stop_for_bad_nums = .TRUE.
+
+      ! Set up procedure hooks
+
+      s%extras_startup => null_extras_startup
+      s%extras_check_model => null_extras_check_model
+      s%extras_start_step => null_extras_start_step
+      s%extras_finish_step => null_extras_finish_step
+      s%extras_after_evolve => null_extras_after_evolve
+      s%how_many_extra_history_columns => null_how_many_extra_history_columns
+      s%data_for_extra_history_columns => null_data_for_extra_history_columns
+      s%how_many_extra_profile_columns => null_how_many_extra_profile_columns
+      s%data_for_extra_profile_columns => null_data_for_extra_profile_columns
+
+      s%job%warn_run_star_extras = .FALSE.
+
+      ! Set up the optical depth at the atmosphere base (this appears
+      ! here because we don't use do_star_job_controls_before)
+
+      call get_T_tau_id(s%atm_T_tau_relation, T_tau_id, ierr)
+      @:ASSERT(ierr == 0, 'failed in get_T_tau_id')
+
+      call atm_get_T_tau_base(T_tau_id, s%tau_base, ierr)
+      @:ASSERT(ierr == 0, 'failed in atm_get_T_tau_base')
+
+      ! Create the star as a pre-MS object (cannot start with a ZAMS
+      ! model, because we use non-standard helium abundances)
+
+      call star_create_pre_ms_model(id, &
+         s%job%pre_ms_T_c, &
+         s%job%pre_ms_guess_rho_c, &
+         s%job%pre_ms_d_log10_P, &
+         s%job%pre_ms_logT_surf_limit, &
+         s%job%pre_ms_logP_surf_limit, &
+         s%job%initial_zfracs, &
+         s%job%dump_missing_metals_into_heaviest, &
+         s%job%change_net .OR. s%job%change_initial_net, &
+         s%job%new_net_name, &
+         s%job%pre_ms_relax_num_steps, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_create_pre_ms_model')
+
+      ! Set history and profile columns (this appears here because we
+      ! don't use do_star_job_controls_after)
+
+      call star_set_history_columns(id, '', .FALSE., ierr)
+      @:ASSERT(ierr == 0, 'failed in star_set_history_columns')
+
+      call star_set_profile_columns(id, '', .FALSE., ierr)
+      @:ASSERT(ierr == 0, 'failed in star_set_profile_columns')
+
+      ! Finish
+
+      return
+
+   end function create_star
+
+   !****
+
+   subroutine destroy_star(id)
+
+      integer, intent(in) :: id
+
+      integer :: ierr
+
+      ! Free the handle
+
+      call free_star(id, ierr)
+      @:ASSERT(ierr == 0, 'failed in free_star')
+
+      ! Finish
+
+      return
+
+   end subroutine destroy_star
+
+   !****
+
+   subroutine evolve_star(id, t_code)
+
+      integer, intent(in)  :: id
+      integer, intent(out) :: t_code
+
+      logical, parameter :: DEBUG = .FALSE.
+
+      type(star_info), pointer :: s
+      integer                  :: ierr
+      logical                  :: first_try
+      integer                  :: result
+
+      ! Run the evolve loop
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      evolve_loop: do
+
+         first_try = .TRUE.
+
+         step_loop: do
+
+            ! Take the step
+
+            result = star_evolve_step(id, first_try)
+
+            ! Check the model
+
+            if (result == keep_going) result = star_check_model(id)
+            if (result == keep_going .AND. &
+               ASSOCIATED(s%extras_check_model)) result = s%extras_check_model(id)
+
+            ! Pick the next timestep
+
+            if (result == keep_going) result = star_pick_next_timestep(id)
+            if (result == keep_going) exit step_loop
+
+            ! See what went wrong
+
+            if (result == redo) then
+               result = star_prepare_to_redo(id)
+            end if
+            if (result == retry) then
+               result = star_prepare_to_retry(id)
+            end if
+            if (result == terminate) then
+               exit step_loop
+            end if
+
+            first_try = .FALSE.
+
+         end do step_loop
+
+         if (DEBUG) then
+            write(OUTPUT_UNIT, *) 'Evolved:', s%star_age, s%time_step, s%why_TLim, s%model_number, result
+         endif
+
+         ! Once we get here, the only options are keep_going or terminate.
+         ! redo, retry, or backup must be done inside the step_loop
+
+         if (result == keep_going) then
+            result = star_finish_step(id, ierr)
+            @:ASSERT(ierr == 0, 'failed in star_finish_step')
+         endif
+
+         if (result == terminate) then
+            result = star_finish_step(id, ierr)
+            @:ASSERT(ierr == 0, 'failed in star_finish_step')
+            exit evolve_loop
+         endif
+
+      end do evolve_loop
+
+      ! Set up the termination code
+
+      t_code = s%termination_code
+
+      ! Finish
+
+      return
+
+   end subroutine evolve_star
+
+   !****
+
+   subroutine evolve_star_to_zams(id, t_code)
+
+      integer, intent(in)  :: id
+      integer, intent(out) :: t_code
+
+      type(star_info), pointer :: s
+      integer                  :: ierr
+      logical                  :: stp_save
+
+      ! Evolve the star to the ZAMS
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      ! Set controls
+
+      stp_save = s%stop_near_zams
+      s%stop_near_zams = .TRUE.
+
+      ! Evolve the star
+
+      call evolve_star(id, t_code)
+
+      if (t_code == t_Lnuc_div_L_zams_limit) t_code = t_ok
+
+      ! Reset controls
+
+      s%stop_near_zams = stp_save
+
+      ! Add atmosphere after pre-MS (from Warrick, 6/4/20)
+
+      ! s%atm_option = 'T_tau'
+      ! s%atm_T_tau_relation = 'Eddington'
+      ! s%atm_T_tau_opacity = 'varying'
+      ! s%atm_build_tau_outer = 1d-4 ! default is 1d-3
+
+      ! Finish
+
+      return
+
+   end subroutine evolve_star_to_zams
+
+   !****
+
+   subroutine evolve_star_to_log_g (id, log_g, t_code)
+
+      integer, intent(in)  :: id
+      real(RD), intent(in) :: log_g
+      integer, intent(out) :: t_code
+
+      type(star_info), pointer :: s
+      integer                  :: ierr
+      real(RD)                 :: log_g_save
+
+      ! Evolve the star until the surface gravity drops below log_g
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      ! Set controls
+
+      log_g_save = s%log_g_lower_limit
+      s%log_g_lower_limit = log_g
+
+      ! Evolve
+
+      call evolve_star(id, t_code)
+
+      if (t_code == t_log_g_lower_limit) t_code = t_ok
+
+      ! Reset controls
+
+      s%log_g_lower_limit = log_g_save
+
+      ! Finish
+
+      return
+
+   end subroutine evolve_star_to_log_g
+
+   !****
+
+   subroutine evolve_star_seismic_process_(id, t_code, process_mod_data, f_enter, f_exit, y_tol, dt_frac, log_g_min)
+
+      integer, intent(in)  :: id
+      integer, intent(out) :: t_code
+      interface
+         subroutine process_mod_data(Teff, logg, FeH, R, L, age, Rcz)
+            use forum_m, only: RD
+            implicit none
+            real(RD), intent(in) :: Teff
+            real(RD), intent(in) :: logg
+            real(RD), intent(in) :: FeH
+            real(RD), intent(in) :: R
+            real(RD), intent(in) :: L
+            real(RD), intent(in) :: age
+            real(RD), intent(in) :: Rcz
+         end subroutine process_mod_data
+      end interface
+      real(RD), intent(in), optional     :: f_enter
+      real(RD), intent(in), optional     :: f_exit
+      real(RD), intent(in), optional     :: y_tol
+      real(RD), intent(in), optional     :: dt_frac
+      real(RD), intent(in), optional     :: log_g_min
+
+      real(RD)                                    :: f_enter_
+      real(RD)                                    :: f_exit_
+      real(RD)                                    :: y_tol_
+      real(RD)                                    :: dt_frac_
+      type(star_info), pointer                    :: s
+      integer                                     :: ierr
+      integer                                     :: l
+      type(freq_t)                                :: fr_obs(0:L_MAX)
+      procedure(null_extras_check_model), pointer :: ecm_save
+      real(RD)                                    :: lgg_save
+      character(64) :: state
+
+      ! Set up parameters
+
+      if (PRESENT(f_enter)) then
+         f_enter_ = f_enter
+      else
+         f_enter_ = 0.1_RD
+      endif
+
+      if (PRESENT(f_exit)) then
+         f_exit_ = f_exit
+      else
+         f_exit_ = 0.2_RD
+      endif
+
+      if (PRESENT(y_tol)) then
+         y_tol_ = y_tol
+      else
+         y_tol_ = 1E-4_RD
+      endif
+
+      if (PRESENT(dt_frac)) then
+         dt_frac_ = dt_frac
+      else
+         dt_frac_ = 0.1_RD
+      endif
+
+      ! Get observational frequencies
+
+      do l = 0, L_MAX
+         fr_obs(l) = get_obs_freqs(l)
+      end do
+
+      !call clear_mod_data_()
+
+      ! Evolve the star until the seismic constraints are met
+
+      call star_ptr(id, s, ierr)
+      @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+      ! Set controls
+
+      ecm_save => s%extras_check_model
+      s%extras_check_model => extras_check_model_
+
+      if (PRESENT(log_g_min)) then
+         lgg_save = s%log_g_lower_limit
+         s%log_g_lower_limit = log_g_min
+      endif
+
+      ! Initialize the state machine
+
+      state = 'START'
+
+      ! Evolve the star
+
+      call evolve_star(id, t_code)
+
+      if (t_code == t_extras_check_model .OR. &
+         t_code == t_log_g_lower_limit) t_code = t_ok
+
+      ! (Possibly) save the final profile
+
+      if (s%job% write_profile_when_terminate) then
+         call star_write_profile_info( &
+            id, s%job%filename_for_profile_when_terminate, &
+            ierr)
+         @:ASSERT(ierr == 0, 'failed in star_write_profile_info')
+      end if
+
+      ! Reset controls
+
+      s%extras_check_model => ecm_save
+
+      if (PRESENT(log_g_min)) then
+         s%log_g_lower_limit = lgg_save
+      endif
+
+      ! Finish
+
+      return
+
+   contains
+
+      function extras_check_model_(id) result(action)
+
+         integer, intent(in) :: id
+         integer             :: action
+
+         logical, parameter :: DEBUG = .FALSE.
+
+         type(star_info), pointer   :: s
+         integer                    :: ierr
+         logical, save              :: call_run_gyre = .FALSE.
+         real(RD)                   :: Delta_nu_obs
+         real(RD)                   :: Delta_nu_mod
+         real(RD), save             :: Delta_nu_prev = 0._RD
+         type(freq_t)               :: fr_mod(0:L_MAX)
+         type(freq_t)               :: fr_cor(0:L_MAX)
+         integer                    :: i_lo
+         real(RD)                   :: nu_obs_lo
+         real(RD)                   :: nu_mod_lo
+         real(RD), save             :: nu_mod_prev
+         integer                    :: n_lo
+         integer, save              :: n_lo_prev
+         integer, allocatable       :: n(:)
+         integer, allocatable, save :: n_prev(:)
+         real(RD)                   :: y
+         real(RD)                   :: y_prev = 0._RD
+         real(RD)                   :: z
+         real(RD), save             :: z_min = 0._RD
+         real(RD), save             :: x_a = 0._RD
+         real(RD), save             :: x_b = 0._RD
+         real(RD), save             :: y_a = 0._RD
+         real(RD), save             :: y_b = 0._RD
+         real(RD), save             :: x_new = 0._RD
+         real(RD), save             :: delta_t = 0._RD
+         real(RD)                   :: dt_lim
+         integer                    :: l
+
+         ! Get the star pointer
+
+         call star_ptr(id, s, ierr)
+         @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+         ! Decide whether to run GYRE at all
+
+         Delta_nu_obs = fr_obs(0)%Delta_nu()
+
+         if (DEBUG) then
+            write(OUTPUT_UNIT, *) 'Delta_nu_obs:', Delta_nu_obs
+         end if
+
+         if (.NOT. call_run_gyre) then
+            call_run_gyre = ABS(Delta_nu_obs - s%delta_nu) <= f_enter_*Delta_nu_obs
+         endif
+
+         if (.NOT. call_run_gyre) then
+            action = keep_going
+            return
+         endif
+
+         ! Initialize model and corrected frequencies
+
+         fr_mod = freq_t()
+         fr_cor = freq_t()
+
+         ! Run GYRE for radial modes
+
+         call run_gyre(id, 0, fr_obs(0), fr_mod(0))
+
+         ! Correct frequencies before bracketing
+
+         call apply_cubic_correction(fr_mod, fr_obs, fr_cor)
+
+         Delta_nu_mod = fr_mod(0)%Delta_nu()
+
+         if (DEBUG) then
+            write(OUTPUT_UNIT, *) 'Delta_nu_mod:', Delta_nu_mod
+         end if
+
+         ! Find the best match to the lowest-frequency observed mode
+
+         nu_obs_lo = fr_obs(0)%nu(1)
+
+         i_lo = MINLOC(ABS(fr_cor(0)%nu - nu_obs_lo), DIM=1)
+
+         nu_mod_lo = fr_cor(0)%nu(i_lo)
+         n_lo = fr_cor(0)%n_pg(i_lo)
+
+         n = fr_cor(0)%n_pg
+
+         ! Update discriminants
+
+         y = nu_mod_lo - nu_obs_lo
+         call chi2_radial(fr_cor, fr_obs, z)
+
+         if (DEBUG) then
+            write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
+         end if
+
+         ! (Possibly) switch to a new state
+
+         action = keep_going
+
+         select case (state)
+
+         case ('START')
+
+            z_min = HUGE(0._RD)
+
+            state = 'EVOLVE'
+
+         case ('RESTART')
+
+            state = 'EVOLVE'
+
+         case ('EVOLVE')
+
+            if (Delta_nu_mod < Delta_nu_obs - f_exit_*Delta_nu_obs) then
+
+               state = 'FINISH'
+
+            elseif (y*y_prev <= 0._RD .AND. is_matched_(n, n_prev)) then
+
+               ! Set up a new bracket
+
+               delta_t = s%dt
+
+               x_a = 0._RD
+               x_b = 1._RD
+
+               y_a = y_prev
+               y_b = y
+
+               state = 'BRACKET'
+
+               if (DEBUG) then
+                  write(OUTPUT_UNIT, *) 'Bracket created:', x_a, x_b, y_a, y_b
+               endif
+
+            endif
+
+         case ('BRACKET')
+
+            if (is_matched_(n, n_prev)) then
+
+               ! Update the bracket
+
+               if (y_a*y <= 0._RD) then
+
+                  x_b = x_new
+
+                  y_b = y
+
+               else
+
+                  x_a = x_new
+
+                  y_a = y
+
+               endif
+
+               if (DEBUG) then
+                  write(OUTPUT_UNIT, *) 'Bracket updated:', x_a, x_b, y_a, y_b
+               endif
+
+               ! Check for convergence
+
+               if (ABS(y) < y_tol_) then
+
+                  if (DEBUG) then
+                     write(OUTPUT_UNIT, *) 'Converged to solution:', y_a, y_b, y, z
+                  endif
+
+                  ! Process the model data if this is the best so far
+
+                  if (z < z_min) then
+
+                     if (DEBUG) then
+                        write(OUTPUT_UNIT, *) 'Best solution updated:', y_a, y_b, y, z
+                     endif
+
+                     call process_mod_data( &
+                        s%Teff, &
+                        s%photosphere_logg, &
+                        log10((1.-s%surface_h1-s%surface_he3-s%surface_he4)/s%surface_h1)+1.64_RD, &
+                        s%photosphere_r, &
+                        s%photosphere_L, &
+                        s%star_age, &
+                        s%conv_mx1_bot_r)
+
+                     ! Store frequencies
+
+                     call set_mod_freqs(0, fr_mod(0))
+
+                     do l = 1, 3
+                        if (fr_obs(l)%n > 0) then
+                           call run_gyre(id, l, fr_obs(l), fr_mod(l))
+                           call set_mod_freqs(l, fr_mod(l))
+                        endif
+                     end do
+
+                     z_min = z
+
+                  endif
+
+                  ! Continue the evolution
+
+                  s%dt = delta_t*(1._RD - x_new)
+
+                  state = 'RESTART'
+
+               endif
+
+            else
+
+               ! Abandon the bracket, because the fundamental mode wasn't found
+
+               if (DEBUG) then
+                  write(OUTPUT_UNIT, *) 'Abandoning bracket (could not match mode orders)'
+               endif
+
+               s%dt = delta_t
+
+               state = 'RESTART'
+
+            endif
+
+         case default
+
+            @:ABORT('invalid state')
+
+         end select
+
+         ! Prepare for the next step
+
+         select case (state)
+
+         case ('EVOLVE')
+
+            ! Limit the timestep based on the change in Delta_nu (relative
+            ! change in Delta_nu must not exceed dt_frac_)
+
+            dt_lim = dt_frac_*ABS(Delta_nu_mod/(Delta_nu_mod - Delta_nu_prev))*s%dt
+
+            if (s%dt > dt_lim) then
+               s%dt = dt_lim
+               action = redo
+            endif
+
+         case ('BRACKET')
+
+            ! Set the timestep for bisection
+
+            x_new = 0.5_RD*(x_a + x_b)
+
+            s%dt = delta_t*x_new
+            action = redo
+
+         case ('FINISH')
+
+            action = terminate
+
+            z_min = 0._RD
+            x_a = 0._RD
+            x_b = 0._RD
+            y_a = 0._RD
+            y_b = 0._RD
+            x_new = 0._RD
+            delta_t = 0._RD
+            call_run_gyre = .FALSE.
+
+            Delta_nu_mod = 0._RD
+            nu_mod_lo = 0._RD
+            n_lo = 0
+            y = 0._RD
+
+         end select
+
+         ! Save the current state for the next call
+
+         Delta_nu_prev = Delta_nu_mod
+
+         nu_mod_prev = nu_mod_lo
+         n_lo_prev = n_lo
+
+         n_prev = n
+
+         y_prev = y
+
+         ! If necessary, set the termination code
+
+         if (action == terminate) s%termination_code = t_extras_check_model
+
+         ! Finish
+
+         return
+
+      end function extras_check_model_
+
+      !****
+
+      function is_matched_(a, b) result(is_matched)
+
+         integer, intent(in) :: a(:)
+         integer, intent(in) :: b(:)
+         logical             :: is_matched
+
+         if (SIZE(a) == SIZE(b)) then
+            is_matched = ALL(a == b)
+         else
+            is_matched = .FALSE.
+         endif
+
+         return
+
+      end function is_matched_
+
+   end subroutine evolve_star_seismic_process_
+
+end module em_mesa_m

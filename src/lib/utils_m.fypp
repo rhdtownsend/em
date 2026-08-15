@@ -1,11 +1,11 @@
-! Module  : util_m
+! Module  : utils_m
 ! Purpose : utility routines
 !
-! Copyright 2016 Rich Townsend
+! Copyright 2016-2026 Rich Townsend
 
 #:include 'em.inc'
 
-module util_m
+module utils_m
 
    ! Uses
 
@@ -66,4 +66,4 @@ contains
 
    end subroutine linear_fit
 
-end module util_m
+end module utils_m
