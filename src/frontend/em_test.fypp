@@ -16,7 +16,7 @@ program em_test
 
    ! No implicit typing
 
-   implicit none
+   implicit none (type, external)
 
    ! Variables
 
@@ -149,4 +149,4 @@ contains
 
    end subroutine write_results_
 
-end program
+end program em_test

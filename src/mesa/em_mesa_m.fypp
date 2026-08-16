@@ -32,7 +32,7 @@ module em_mesa_m
 
    ! No implicit typing
 
-   implicit none
+   implicit none (type, external)
 
    ! Parameter definitions
 
@@ -445,7 +445,7 @@ contains
       interface
          subroutine process_mod_data(Teff, logg, FeH, R, L, age, Rcz)
             use forum_m, only: RD
-            implicit none
+            implicit none (type, external)
             real(RD), intent(in) :: Teff
             real(RD), intent(in) :: logg
             real(RD), intent(in) :: FeH
@@ -580,7 +580,7 @@ contains
          integer, allocatable       :: n(:)
          integer, allocatable, save :: n_prev(:)
          real(RD)                   :: y
-         real(RD)                   :: y_prev = 0._RD
+         real(RD), save             :: y_prev = 0._RD
          real(RD)                   :: z
          real(RD), save             :: z_min = 0._RD
          real(RD), save             :: x_a = 0._RD

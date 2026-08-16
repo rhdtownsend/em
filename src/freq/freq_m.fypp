@@ -19,7 +19,7 @@ module freq_m
 
    ! No implicit typing
 
-   implicit none
+   implicit none (type, external)
 
    ! Parameter definitions
 
@@ -409,7 +409,7 @@ contains
 
       real(RD), intent(in)     :: fr(:)
       type(freq_t), intent(in) :: fr0, fr1, fr2
-      real(RD)                 :: r02(:)
+      real(RD), intent(out)    :: r02(:)
 
       real(RD) :: Delta_nu
       integer  :: i0, i1, i2, end0, end1, end2, i, n
@@ -486,7 +486,7 @@ contains
 
       real(RD), intent(in)     :: fr(:)
       type(freq_t), intent(in) :: fr0, fr1, fr3
-      real(RD)                 :: r13(:)
+      real(RD), intent(out)    :: r13(:)
 
       real(RD) :: Delta_nu
       integer  :: i0, i1, i3, end0, end1, end3, i, n

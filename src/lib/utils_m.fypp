@@ -15,7 +15,7 @@ module utils_m
 
    ! No implicit typing
 
-   implicit none
+   implicit none (type, external)
 
    ! Access specifiers
 
