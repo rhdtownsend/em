@@ -10,3 +10,4 @@ respect-gitignore = false
 line-length = 132
 
 [check.per-file-ignores]
+"ff_amp2.f90" = ["C092"] # function not contained in module/program

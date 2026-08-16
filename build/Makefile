@@ -14,7 +14,7 @@ PKG_FILES = em.pc
 INC_FILES = em_m.mod em.inc
 
 ifeq ($(FRONTENDS),yes)
-   BIN_TARGETS += em_test
+   BIN_TARGETS += em_test testffamp2
 endif
 
 # Source file lists & related variables
@@ -27,13 +27,17 @@ em_test_SRCS = em_test.fypp
 em_test_USES = $(libem_SRCS)
 em_test_LIBS = libem
 
+testffamp2_SRCS = testffamp2.f ff_amp2.fypp
+testffamp2_USES = $(libem_SRCS)
+testffamp2_LIBS = libem
+
 libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freq_m.fypp utils_m.fypp
 
 # Build flags
 
 PKGS := gyre mesa lapack95
 
-PKGCONF_FLAGS := --with-path=$(PKG_DIR) --with-path=$(GYRE_DIR)/lib/pkgconfig
+PKGCONF_FLAGS := --with-path=$(PKG_DIR)
 
 ifeq ($(CRMATH),yes)
    PKGS += crmath

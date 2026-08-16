@@ -23,10 +23,6 @@ FPE ?= yes
 # Enable correctly rounded math functions
 CRMATH ?= yes
 
-# Enable portable math for bit-for-bit reproducibility (with a
-# possible performance penalty)
-PORTABLE ?= yes
-
 # Use IEEE fortran features
 IEEE ?= yes
 
@@ -46,6 +42,8 @@ export CRMATH
 export PORTABLE
 export IEEE
 
+export MESA_DIR
+
 # General make settings
 
 export SH = /bin/bash
@@ -61,27 +59,28 @@ export SCT_DIR ?= $(CURDIR)/scripts
 
 export SRC_DIR := $(CURDIR)/src
 export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/freq \
-                   $(SRC_DIR)/include $(SRC_DIR)/frontend
+                   $(SRC_DIR)/include $(SRC_DIR)/frontend $(SRC_DIR)/amp
 
 # Rules
 
 install : build | $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
 	@$(MAKE) -C build $@
 
-build : $(PKG_DIR)/mesa.pc
+build : $(PKG_DIR)/mesa.pc $(PKG_DIR)/gyre.pc
 	@$(MAKE) -C build $@
 
 $(PKG_DIR)/mesa.pc : $(SRC_DIR)/pkgconfig/mesa.pc.in | $(PKG_DIR)
-	@if [[ -n "$MESA_DIR" ]]; then \
-	mesa_version=$(shell $(SCT_DIR)/get_mesa_version.sh); \
-	awk -v prefix=$$MESA_DIR -v version=$$mesa_version \
-	'{ sub(/%PREFIX%/, prefix); sub(/%VERSION%/, version); print }' $< > $@; else \
-	echo "MESA_DIR is not set"; \
-	fi
+	@$(SCT_DIR)/configure_mesa.sh $< $@
+
+$(PKG_DIR)/gyre.pc : $(SRC_DIR)/pkgconfig/gyre.pc.in | $(PKG_DIR)
+	@$(SCT_DIR)/configure_gyre.sh $< $@
 
 clean :
 	@$(MAKE) -C build $@
 	@rm -rf $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
+
+check_versions :
+	@
 
 check_src :
 	@$(MAKE) -C build $@

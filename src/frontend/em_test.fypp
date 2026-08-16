@@ -28,7 +28,6 @@ program em_test
    type(freq_t) :: fr_mod_0
    type(freq_t) :: fr_mod_1
    type(freq_t) :: fr_mod_2
-   integer      :: i
    real(RD)     :: Teff
    real(RD)     :: logg
    real(RD)     :: FeH

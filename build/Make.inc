@@ -92,6 +92,7 @@ $(DEPEND_DIR) :
 ########
 
 vpath %.fypp $(SRC_DIRS)
+vpath %.f $(SRC_DIRS)
 vpath %.pc $(SRC_DIR)/pkgconfig
 vpath %.inc $(SRC_DIR)/include
 
@@ -178,6 +179,10 @@ endif
 
 $(DEPEND_DIR)/%.anc : %.f90 | $(DEPEND_DIR)
 	@$(FC) $(FFLAGS) -fsyntax-only -c $*.f90
+	@touch $@
+
+$(DEPEND_DIR)/%.anc : %.f | $(DEPEND_DIR)
+	@$(FC) $(FFLAGS) -fsyntax-only -c $*.f
 	@touch $@
 
 $(ALL_DEPS) : | $(DEPEND_DIR)

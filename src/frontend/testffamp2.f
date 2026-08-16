@@ -1,4 +1,4 @@
-      program testff
+      program testffamp2
 
       implicit none
 
