@@ -12,7 +12,7 @@ DEBUG ?= no
 
 # Build & link against shared libraries (with a possible performance
 # penalty)
-SHARED ?= yes
+SHARED ?= no
 
 # Enable OpenMP parallelization
 OMP ?= yes
@@ -57,6 +57,7 @@ export BIN_DIR ?= $(CURDIR)/bin
 export LIB_DIR ?= $(CURDIR)/lib
 export PKG_DIR ?= $(LIB_DIR)/pkgconfig
 export INC_DIR ?= $(CURDIR)/include
+export SCT_DIR ?= $(CURDIR)/scripts
 
 export SRC_DIR := $(CURDIR)/src
 export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/freq \
@@ -67,8 +68,16 @@ export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/fre
 install : build | $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
 	@$(MAKE) -C build $@
 
-build :
+build : $(PKG_DIR)/mesa.pc
 	@$(MAKE) -C build $@
+
+$(PKG_DIR)/mesa.pc : $(SRC_DIR)/pkgconfig/mesa.pc.in | $(PKG_DIR)
+	@if [[ -n "$MESA_DIR" ]]; then \
+	mesa_version=$(shell $(SCT_DIR)/get_mesa_version.sh); \
+	awk -v prefix=$$MESA_DIR -v version=$$mesa_version \
+	'{ sub(/%PREFIX%/, prefix); sub(/%VERSION%/, version); print }' $< > $@; else \
+	echo "MESA_DIR is not set"; \
+	fi
 
 clean :
 	@$(MAKE) -C build $@

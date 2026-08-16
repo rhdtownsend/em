@@ -29,32 +29,11 @@ em_test_LIBS = libem
 
 libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freq_m.fypp utils_m.fypp
 
-# MESA stuff
-
-MODPATH=${MESA_DIR}/include
-
-MESA_LIB_DIR = $(MESA_DIR)/lib
-
-LOAD_PGPLOT = `mesasdk_pgplot_link`
-LOAD_LAPACK = `mesasdk_lapack_link`
-LOAD_BLAS = `mesasdk_blas_link`
-LOAD_HDF5 = `mesasdk_hdf5_link`
-LOAD_CRMATH = `mesasdk_crmath_link`
-
-LOAD_MATRIX = $(LOAD_CRMATH) -lmtx -lconst -lutils -lmath $(LOAD_LAPACK) $(LOAD_BLAS)
-LOAD_MESA_NUMERICS = -linterp_2d -linterp_1d -lnum -lauto_diff -lforum $(LOAD_MATRIX) $(LOAD_HDF5)
-LOAD_MESA_MICRO = -lnet -leos -lkap -lrates -lneu -lchem $(LOAD_MESA_NUMERICS)
-LOAD_MESA_MACRO = -lionization -latm -lcolors -lturb $(LOAD_MESA_MICRO)
-LOAD_MESA_STAR_SUPPORT = $(LOAD_MESA_MACRO)
-LOAD_STAR_MODS = -lstar -lstar_data $(LOAD_MESA_STAR_SUPPORT)
-STAR_LOAD_LIST = $(LOAD_STAR_MODS) $(LOAD_PGPLOT) $(LOAD_SE)
-LOAD_MESA_STAR = -L$(MESA_LIB_DIR) $(STAR_LOAD_LIST)
-
 # Build flags
 
-PKGS := gyre lapack95
+PKGS := gyre mesa lapack95
 
-PKGCONF_FLAGS := --with-path=$(GYRE_DIR)/lib/pkgconfig
+PKGCONF_FLAGS := --with-path=$(PKG_DIR) --with-path=$(GYRE_DIR)/lib/pkgconfig
 
 ifeq ($(CRMATH),yes)
    PKGS += crmath
@@ -65,9 +44,9 @@ endif
 
 PKGCONF_FLAGS += --define-variable=math_slot=$(MATH_SLOT)
 
-FFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags $(PKGS)` -I$(MESA_DIR)/include -I$(MESA_DIR)/star/make
-FPPFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags-only-I $(PKGS)` -m os
-LDFLAGS := `pkgconf $(PKGCONF_FLAGS) --libs $(PKGS)` $(LOAD_MESA_STAR)
+FFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags $(PKGS)`
+FPPFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags-only-I $(PKGS)`
+LDFLAGS := `pkgconf $(PKGCONF_FLAGS) --libs $(PKGS)`
 
 unexport MESASDK_MATH_SLOT
 
@@ -89,4 +68,4 @@ check_src:
 
 check_src : SRC_DIRS ?= ../src
 
-.PHONY: all linter check_src
+.PHONY: all linter check_src print_link

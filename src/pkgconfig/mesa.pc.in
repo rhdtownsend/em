@@ -1,0 +1,11 @@
+prefix=%PREFIX%
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: mesa
+Description: MESA libraries
+URL: https://github.com/MESAHub/mesa
+Version: %VERSION%
+Requires: lapack blas hdf5_fortran pgplot
+Cflags: -I${includedir} -I${prefix}/star/make
+Libs: -Wl,-rpath,${libdir} -L${libdir} -lstar -lstar_data -lionization -latm -lcolors -lturb -lnet -leos -lkap -lrates -lneu -lchem -linterp_2d -linterp_1d -lnum -lauto_diff -lforum -lmtx -lconst -lutils -lmath
