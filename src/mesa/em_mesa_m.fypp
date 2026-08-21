@@ -102,6 +102,10 @@ contains
       call starlib_init(s, ierr)
       @:ASSERT(ierr == 0, 'failed in starlib_init')
 
+      ! Blank out the inlist filename (some routines look at it)
+
+      s%inlist_fname = ''
+
       ! Set up handles
 
       call star_set_kap_and_eos_handles(id, ierr)
@@ -110,7 +114,7 @@ contains
       call star_set_colors_handles(id, ierr)
       @:ASSERT(ierr == 0, 'failed in star_set_colors_handles')
 
-      ! Set up controls (by passing an empty filename, no inlist will be
+      ! Set up controls (by passing a blank filename, no inlist will be
       ! read, but defaults are set)
 
       s%kap_rq%Zbase = 0.02_RD
@@ -165,12 +169,12 @@ contains
       s%job%write_profile_when_terminate = .FALSE.
       s%job%filename_for_profile_when_terminate = 'profile_final.data'
 
-      s%photo_interval = 0
+      s%photo_interval = HUGE(0)
 
       s%log_directory = '.'
       s%photo_directory = '.'
 
-      s%terminal_interval = 0
+      s%terminal_interval = HUGE(0)
 
       ! Include the atmosphere as part of the interior
       ! More stable but implies Eddington T(tau) relation
