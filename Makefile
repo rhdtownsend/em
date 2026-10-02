@@ -4,9 +4,6 @@
 # Build frontend executables
 FRONTENDS ?= yes
 
-# Path to GYRE installation
-GYRE_DIR ?= $(HOME)/gyre-9.1.1
-
 # Enable debugging (with a performance penalty)
 DEBUG ?= no
 
@@ -33,16 +30,12 @@ IEEE ?= yes
 # Export options
 
 export FRONTENDS
-export GYRE_DIR
 export DEBUG
 export SHARED
 export OMP
 export FPE
 export CRMATH
-export PORTABLE
 export IEEE
-
-export MESA_DIR
 
 # General make settings
 
