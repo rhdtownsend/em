@@ -1,0 +1,164 @@
+! Module  : deriv_m
+! Purpose : derivative evaluation functions
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'forum.inc'
+
+module deriv_m
+
+   ! Uses
+
+   use forum_m, only: RD
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none (type, external)
+
+   ! Access specifiers
+
+   public :: deriv
+
+   ! Default access
+
+   private
+
+contains
+
+   function deriv(x, f, deriv_type, df_dx_a, df_dx_b) result(df_dx)
+
+      real(RD), intent(in)           :: x(:)
+      real(RD), intent(in)           :: f(:)
+      character(*), intent(in)       :: deriv_type
+      real(RD), optional, intent(in) :: df_dx_a
+      real(RD), optional, intent(in) :: df_dx_b
+      real(RD)                       :: df_dx(SIZE(x))
+
+      ! Evaluate the derivative df/dx
+
+      select case (deriv_type)
+      case('FINDIFF')
+         df_dx = deriv_findiff_(x, f, df_dx_a, df_dx_b)
+      case('MONO')
+         df_dx = deriv_mono_(x, f, df_dx_a, df_dx_b)
+      case default
+         @:ABORT('invalid deriv_type')
+      end select
+
+      ! Finish
+
+      return
+
+   end function deriv
+
+   !****
+
+   function deriv_findiff_(x, f, df_dx_a, df_dx_b) result(df_dx)
+
+      real(RD), intent(in)           :: x(:)
+      real(RD), intent(in)           :: f(:)
+      real(RD), intent(in), optional :: df_dx_a
+      real(RD), intent(in), optional :: df_dx_b
+      real(RD)                       :: df_dx(SIZE(x))
+
+      integer  :: n
+      real(RD) :: h(SIZE(x)-1)
+      real(RD) :: s(SIZE(x)-1)
+
+      @:ASSERT_DEBUG(SIZE(x) > 1, 'array too short')
+
+      @:CHECK_BOUNDS(SIZE(f), SIZE(x))
+
+      ! Calculate the first derivatives via centered finite differences
+
+      n = SIZE(x)
+
+      h = x(2:) - x(:n-1)
+
+      s = (f(2:) - f(:n-1))/h
+
+      if (PRESENT(df_dx_a)) then
+         df_dx(1) = df_dx_a
+      else
+         df_dx(1) = s(1)
+      endif
+
+      df_dx(2:n-1) = 0.5_RD*(s(1:n-2) + s(2:n-1))
+
+      if (PRESENT(df_dx_b)) then
+         df_dx(n) = df_dx_b
+      else
+         df_dx(n) = s(n-1)
+      endif
+
+      ! Finish
+
+      return
+
+   end function deriv_findiff_
+
+   !****
+
+   function deriv_mono_(x, f, df_dx_a, df_dx_b) result(df_dx)
+
+      real(RD), intent(in)           :: x(:)
+      real(RD), intent(in)           :: f(:)
+      real(RD), intent(in), optional :: df_dx_a
+      real(RD), intent(in), optional :: df_dx_b
+      real(RD)                       :: df_dx(SIZE(x))
+
+      integer  :: n
+      real(RD) :: h(SIZE(x)-1)
+      real(RD) :: s(SIZE(x)-1)
+      real(RD) :: p(SIZE(x))
+      integer  :: i
+
+      @:ASSERT_DEBUG(SIZE(x) > 1, 'array too short')
+
+      @:CHECK_BOUNDS(SIZE(f), SIZE(x))
+
+      ! Calculate the first derivatives using the Steffen (1990, A&A,
+      ! 239, 443) monontonicity preserving algorithm
+
+      n = SIZE(x)
+
+      h = x(2:) - x(:n-1)
+
+      s = (f(2:) - f(:n-1))/h
+
+      ! Calculate parabolic gradients
+
+      if (PRESENT(df_dx_a)) then
+         p(1) = df_dx_a
+      else
+         p(1) = s(1)
+      endif
+
+      p(2:n-1) = (s(1:n-2)*h(2:n-1) + s(2:n-1)*h(1:n-2))/(h(1:n-2) + h(2:n-1))
+
+      if (PRESENT(df_dx_b)) then
+         p(n) = df_dx_b
+      else
+         p(n) = s(n-1)
+      endif
+
+      ! Calculate monotonic gradients
+
+      df_dx(1) = p(1)
+
+      do i = 2,n-1
+         df_dx(i) = (SIGN(1._RD, s(i-1)) + SIGN(1._RD, s(i)))* &
+            MIN(abs(s(i-1)), abs(s(i)), 0.5_RD*abs(p(i)))
+      end do
+
+      df_dx(n) = p(n)
+
+      ! Finish
+
+      return
+
+   end function deriv_mono_
+
+end module deriv_m

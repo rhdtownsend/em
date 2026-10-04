@@ -31,7 +31,8 @@ testffamp2_SRCS = testffamp2.f ff_amp2.fypp
 testffamp2_USES = $(libem_SRCS)
 testffamp2_LIBS = libem
 
-libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freq_m.fypp utils_m.fypp
+libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freq_m.fypp \
+             interp_m.fypp deriv_m.fypp utils_m.fypp
 
 # Build flags
 

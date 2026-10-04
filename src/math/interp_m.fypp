@@ -1,0 +1,216 @@
+! Module  : interp_m
+! Purpose : piecewise cubic interpolators
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'forum.inc'
+
+module interp_m
+
+   ! Uses
+
+   use forum_m, only: RD, locate
+
+   use deriv_m
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none (type, external)
+
+   ! Derived-type definitions
+
+   type :: interp_t
+      private
+      real(RD), allocatable :: x(:)      ! Abscissa
+      real(RD), allocatable :: f(:)      ! Ordinate
+      real(RD), allocatable :: df_dx(:)  ! First derivatives
+      integer               :: n         ! Number of points
+   contains
+      private
+      procedure, public :: eval_f
+   end type interp_t
+
+   ! Interfaces
+
+   interface interp_t
+      module procedure interp_t_
+   end interface interp_t
+
+   ! Access specifiers
+
+   public :: interp_t
+   public :: interp_vec
+
+   ! Default access
+
+   private
+
+contains
+
+   function interp_t_(x, f, df_dx) result(in)
+
+      real(RD), intent(in) :: x(:)
+      real(RD), intent(in) :: f(:)
+      real(RD), intent(in) :: df_dx(:)
+      type(interp_t)       :: in
+
+      @:CHECK_BOUNDS(SIZE(f), SIZE(x))
+      @:CHECK_BOUNDS(SIZE(df_dx), SIZE(x))
+
+      @:ASSERT(ALL(x(2:) > x(:SIZE(x)-1)), 'non-monotonic abscissa')
+
+      ! Construct the interp_t
+
+      ! Store values
+
+      in%x = x
+      in%f = f
+      in%df_dx = df_dx
+
+      in%n = SIZE(x)
+
+      ! Finish
+
+      return
+
+   end function interp_t_
+
+   !****
+
+   subroutine eval_f(this, x, f)
+
+      class(interp_t), intent(in) :: this
+      real(RD), intent(in)        :: x
+      real(RD), intent(out)       :: f
+
+      integer, save :: i = 1
+      integer       :: j
+      real(RD)      :: h
+      real(RD)      :: w
+
+      !$OMP THREADPRIVATE (i)
+
+      ! Set up the bracketing index
+
+      call locate(this%x, x, i)
+      @:ASSERT(i >= 1 .AND. i <= this%n, 'out-of-bounds interpolation')
+
+      j = MIN(i, this%n-1)
+
+      ! Set up the interpolation weight
+
+      h = this%x(j+1) - this%x(j)
+      w = (x - this%x(j))/h
+
+      ! Evaluate the function
+
+      f = &
+         this%f(j)*dphi_dt_(1._RD-w, 0) + &
+         this%f(j+1)*dphi_dt_(w, 0) - &
+         this%df_dx(j)*dpsi_dt_(1._RD-w, 0)/h**(-1) + &
+         this%df_dx(j+1)*dpsi_dt_(w, 0)/h**(-1)
+
+      ! (the last two lines included for bit-for-bit compatibility)
+
+      ! Finish
+
+      return
+
+   end subroutine eval_f
+
+   !****
+
+   function dphi_dt_(t, n) result(dphi_dt)
+
+      real(RD), intent(in) :: t
+      integer, intent(in)  :: n
+      real(RD)             :: dphi_dt
+
+      ! Evaluate the n'th derivative of the Hermite phi basis function
+
+      select case (n)
+      case (-1)
+         dphi_dt = t**3 - t**4/2._RD
+      case (0)
+         dphi_dt = 3._RD*t**2 - 2._RD*t**3
+      case (1)
+         dphi_dt = 6._RD*t - 6._RD*t**2
+      case (2)
+         dphi_dt = 6._RD - 12._RD*t
+      case (3)
+         dphi_dt = -12._RD
+      case (4:)
+         dphi_dt = 0._RD
+      case default
+         @:ABORT('invalid n')
+      end select
+
+      ! Finish
+
+      return
+
+   end function dphi_dt_
+
+   !****
+
+   function dpsi_dt_(t, n) result(dpsi_dt)
+
+      real(RD), intent(in) :: t
+      integer, intent(in)  :: n
+      real(RD)             :: dpsi_dt
+
+      ! Evaluate the n'th derivative of the Hermite psi basis function
+
+      select case (n)
+      case (-1)
+         dpsi_dt = t**4/4._RD - t**3/3._RD
+      case (0)
+         dpsi_dt = t**3 - t**2
+      case (1)
+         dpsi_dt = 3._RD*t**2 - 2._RD*t
+      case (2)
+         dpsi_dt = 6._RD*t - 2._RD
+      case (3)
+         dpsi_dt = 6._RD
+      case (4:)
+         dpsi_dt = 0._RD
+      case default
+         @:ABORT('invalid n')
+      end select
+
+      ! Finish
+
+      return
+
+   end function dpsi_dt_
+
+   !****
+
+   function interp_vec(x, f, x_new, deriv_type) result(f_new)
+
+      real(RD), intent(in)     :: x(:)
+      real(RD), intent(in)     :: f(:)
+      real(RD), intent(in)     :: x_new(:)
+      character(*), intent(in) :: deriv_type
+      real(RD)                 :: f_new(SIZE(x_new))
+
+      type(interp_t) :: in
+      integer        :: i
+
+      ! Interpolate f(x) onto the new abscissa x_new
+
+      in = interp_t(x, f, deriv(x, f, deriv_type))
+
+      do i = 1, SIZE(x_new)
+         call in%eval_f(x_new(i), f_new(i))
+      end do
+
+      ! Finish
+
+      return
+
+   end function interp_vec
+
+end module interp_m

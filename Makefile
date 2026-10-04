@@ -52,7 +52,7 @@ export SCT_DIR ?= $(CURDIR)/scripts
 
 export SRC_DIR := $(CURDIR)/src
 export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/freq \
-                   $(SRC_DIR)/include $(SRC_DIR)/frontend $(SRC_DIR)/amp
+                   $(SRC_DIR)/math $(SRC_DIR)/include $(SRC_DIR)/frontend $(SRC_DIR)/amp
 
 # Rules
 
