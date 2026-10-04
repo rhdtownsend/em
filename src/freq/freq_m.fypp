@@ -5,14 +5,15 @@
 
 #:include 'em.inc'
 
+#:include 'forum.inc'
+
 module freq_m
 
    ! Uses
 
    use forum_m, only: RD, sort_indices
 
-   use interp_1d_lib, only: interpolate_vector, interp_pm
-
+   use interp_m
    use utils_m
 
    use ISO_FORTRAN_ENV
@@ -205,7 +206,7 @@ contains
       real(RD), intent(out)    :: chi2
       integer                  :: i
 
-      chi2 = 0d0
+      chi2 = 0._RD
       do i = 1, fr_obs(0)%n
          chi2 = chi2 + (fr_mod(0)%nu(i)-fr_obs(0)%nu(i))**2/fr_obs(0)%dnu(i)**2
       end do
@@ -319,243 +320,223 @@ contains
 
    !****
 
-   subroutine get_r010_(fr, fr0, fr1, r010)
+   subroutine eval_r010_(fr, fr0, fr1, r010)
 
       real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0, fr1
+      type(freq_t), intent(in) :: fr0
+      type(freq_t), intent(in) :: fr1
       real(RD), intent(out)    :: r010(:)
 
-      real(RD) :: Delta_nu
-      integer  :: i0, i1, end0, end1, i, n, l
+      integer               :: i0
+      integer               :: i1
+      integer               :: end0
+      integer               :: end1
+      real(RD), allocatable :: x0(:)
+      real(RD), allocatable :: y0(:)
+      real(RD), allocatable :: x1(:)
+      real(RD), allocatable :: y1(:)
+      real(RD), allocatable :: x(:)
+      real(RD), allocatable :: y(:)
+      integer, allocatable  :: j(:)
 
-      ! parameters for interpolant
-      real(RD), allocatable :: x(:), y(:)
-      integer, parameter    :: nwork = 6
-      real(RD), pointer     :: work1(:)
-      character(len=256)    :: interp_dbg_str
-      integer               :: ierr
+      @:CHECK_BOUNDS(SIZE(r010), SIZE(fr))
 
-      r010 = 0d0
+      ! Evaluate r01 and r10 frequency ratios, following Roxburgh &
+      ! Vorontsov (2003), eq. (8)
 
-      Delta_nu = fr0%Delta_nu()
+      ! Set up indices into the frequency arrays
 
-      i0 = 1
-      i1 = 1
+      associate(Delta_nu => fr0%Delta_nu())
 
-      do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
-         i0 = i0 + 1
-      end do
+         i0 = FINDLOC(fr0%nu >= fr1%nu(1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-      do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
-         i1 = i1 + 1
-      end do
+         i1 = FINDLOC(fr1%nu >= fr0%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-      end0 = fr0%n
-      end1 = fr1%n
+         end0 = FINDLOC(fr0%nu <= fr1%nu(fr1%n) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT_DEBUG(end0 > 0, 'invalid end0')
 
-      do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
-         end0 = end0 - 1
-      end do
+         end1 = FINDLOC(fr1%nu <= fr0%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT_DEBUG(end1 > 0, 'invalid end1')
 
-      do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
-         end1 = end1 - 1
-      end do
+      end associate
 
-      !    number of l=0         number of l=1
-      n = (end0 - i0 + 1) + (end1 - i1 + 1) - 4
-      allocate(x(n), y(n))
-      x = 0d0
-      y = 0d0
+      ! Calculate frequency ratios
 
-      ! write(*,*) 'i0, i1 =', i0, i1
-      ! write(*,*) 'fr0(i0), fr1(i1) =', fr0%nu(i0), fr1%nu(i1)
-      ! write(*,*) 'end0, end1 =', end0, end1
-      ! write(*,*) 'fr0(end0), fr1(end1) =', fr0%nu(end0), fr1%nu(end1)
-      ! write(*,*) 'n =', n
+      ! r01
 
-      l = 0
-      if (fr1%nu(i1) < fr0%nu(i0)) l = 1
+      associate(n => end0 - i0 - 1)
 
-      do i = 1, n
-         if (l == 0) then
-            Delta_nu = fr1%nu(i1+1) - fr1%nu(i1)
-            x(i) = fr0%nu(i0+1)
-            y(i) = (fr0%nu(i0) - 4d0*fr1%nu(i1) + 6d0*fr0%nu(i0+1) &
-               - 4d0*fr1%nu(i1+1) + fr0%nu(i0+2))/8d0/Delta_nu
-            l = 1
-            i0 = i0 + 1
-         else if (l == 1) then
-            Delta_nu = fr0%nu(i0+1) - fr0%nu(i0)
-            x(i) = fr1%nu(i1+1)
-            y(i) = -(fr1%nu(i1) - 4d0*fr0%nu(i0) + 6d0*fr1%nu(i1+1) &
-               - 4d0*fr0%nu(i0+1) + fr1%nu(i1+2))/8d0/Delta_nu
-            l = 0
-            i1 = i1 + 1
-         else
-            stop 'l /= 0 or 1 in get_r010'
-         end if
-      end do
+         x0 = fr0%nu(i0+1:i0+n)
+         y0 = (fr0%nu(i0:i0+n-1) - 4._RD*fr1%nu(i1:i1+n-1) + 6._RD*fr0%nu(i0+1:i0+n) - &
+            4._RD*fr1%nu(i1+1:i1+n) + fr0%nu(i0+2:i0+n+1)) / 8._RD / (fr1%nu(i1+1:i1+n) - fr1%nu(i1:i1+n-1))
 
-      allocate(work1(nwork*size(x)))
-      call interpolate_vector(n, x, size(fr), fr, y, r010, interp_pm, &
-         nwork, work1, interp_dbg_str, ierr)
-      deallocate(work1, x, y)
+      end associate
 
-   end subroutine get_r010_
+      ! r10
+
+      associate(n => end1 - i1 - 1)
+
+         x1 = fr1%nu(i1+1:i1+n)
+         y1 = (fr1%nu(i1:i1+n) - 4._RD*fr0%nu(i0:i0+n-1) + 6._RD*fr1%nu(i1+1:i1+n) - &
+            4._RD*fr0%nu(i0+1:i0+n) + fr1%nu(i1+2:i1+n+1)) / 8._RD / (fr0%nu(i0+1:i0+n) - fr0%nu(i0:i0+n-1))
+
+      end associate
+
+      ! Merge the two arrays, in frequency order
+
+      x = [x0,x1]
+      y = [y0,y1]
+
+      j = sort_indices(x)
+
+      x = x(j)
+      y = y(j)
+
+      ! Interpolate onto the abscissa given by fr
+
+      r010 = interp_vec(x, y, fr, 'MONO')
+
+      ! Finish
+
+      return
+
+   end subroutine eval_r010_
 
    !****
 
-   subroutine get_r02_(fr, fr0, fr1, fr2, r02)
+   subroutine eval_r02_(fr, fr0, fr1, fr2, r02)
 
       real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0, fr1, fr2
+      type(freq_t), intent(in) :: fr0
+      type(freq_t), intent(in) :: fr1
+      type(freq_t), intent(in) :: fr2
       real(RD), intent(out)    :: r02(:)
 
-      real(RD) :: Delta_nu
-      integer  :: i0, i1, i2, end0, end1, end2, i, n
+      integer               :: i0
+      integer               :: i1
+      integer               :: i2
+      integer               :: end0
+      integer               :: end1
+      integer               :: end2
+      real(RD), allocatable :: x(:)
+      real(RD), allocatable :: y(:)
 
-      ! parameters for interpolant
-      real(RD), allocatable :: x(:), y(:)
-      integer, parameter    :: nwork = 6
-      real(RD), pointer     :: work1(:)
-      character(len=256)    :: interp_dbg_str
-      integer               :: ierr
+      @:CHECK_BOUNDS(SIZE(r02), SIZE(fr))
 
-      r02 = 0d0
+      ! Evaluate r02 frequency ratios, following Roxburgh & Vorontsov
+      ! (2003), eqn. (7)
 
-      Delta_nu = fr0%Delta_nu()
+      ! Set up indices into the frequency arrays
 
-      i0 = 1
-      i1 = 1
-      i2 = 1
+      associate(Delta_nu => fr0%Delta_nu())
 
-      do while (fr0%nu(i0) < fr1%nu(i1))
-         i0 = i0 + 1
-      end do
+         i0 = FINDLOC(fr0%nu >= fr1%nu(1), .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-      do while (fr1%nu(i1) < fr0%nu(i0) - 0.75d0*Delta_nu)
-         i1 = i1 + 1
-      end do
+         i1 = FINDLOC(fr1%nu >= fr0%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i1 > 0, 'invalid i1')
 
-      do while (fr2%nu(i2) < fr1%nu(i1))
-         i2 = i2 + 1
-      end do
+         i2 = FINDLOC(fr2%nu >= fr1%nu(i1), .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i2 > 0, 'invalid i2')
 
-      end0 = fr0%n
-      end1 = fr1%n
-      end2 = fr2%n
+         end0 = FINDLOC(fr0%nu <= fr1%nu(fr0%n), .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT(end0 > 0, 'invalid end0')
 
-      do while (fr0%nu(end0) > fr1%nu(end1))
-         end0 = end0 - 1
-      end do
+         end1 = FINDLOC(fr1%nu <= fr0%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT(end0 > 0, 'invalid end1')
 
-      do while (fr1%nu(end1) > fr0%nu(end0) + 0.75d0*Delta_nu)
-         end1 = end1 - 1
-      end do
+         end2 = FINDLOC(fr2%nu <= fr1%nu(end1), .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT(end0 > 0, 'invalid end2')
 
-      do while (fr2%nu(end2) > fr1%nu(end1))
-         end2 = end2 - 1
-      end do
+      end associate
 
-      n = end2 - i2 + 1
-      allocate(x(n), y(n))
-      x = 0d0
-      y = 0d0
+      ! Calculate frequency ratios
 
-      ! write(*,*) 'i0, i1, i2 =', i0, i1, i2
-      ! write(*,*) 'fr0(i0), fr1(i1), fr2(i2) =', fr0%nu(i0), fr1%nu(i1), fr2%nu(i2)
-      ! write(*,*) 'end0, end1 =', end0, end1, end2
-      ! write(*,*) 'fr0(end0), fr1(end1), fr2(end2) =', fr0%nu(end0), fr1%nu(end1), fr2%nu(end2)
-      ! write(*,*) 'n =', n
+      associate(n => end2 - i2 + 1)
 
-      do i = 0, n-1
-         x(i+1) = fr0%nu(i0+i)
-         y(i+1) = (fr0%nu(i0+i)-fr2%nu(i2+i))/(fr1%nu(i1+i+1)-fr1%nu(i1+i))
-      end do
+         x = fr0%nu(i0:i0+n-1)
+         y = (fr0%nu(i0:i0+n-1)-fr2%nu(i2:i2+n-1)) / (fr1%nu(i1+1:i1+n)-fr1%nu(i1:i1+n-1))
 
-      allocate(work1(nwork*size(x)))
-      call interpolate_vector(n, x, size(fr), fr, y, r02, interp_pm, &
-         nwork, work1, interp_dbg_str, ierr)
-      deallocate(work1, x, y)
+      end associate
 
-   end subroutine get_r02_
+      ! Interpolate onto the abscissa given by fr
+
+      r02 = interp_vec(x, y, fr, 'MONO')
+
+      ! Finish
+
+      return
+
+   end subroutine eval_r02_
 
    !****
 
-   subroutine get_r13_(fr, fr0, fr1, fr3, r13)
+   subroutine eval_r13_(fr, fr0, fr1, fr3, r13)
 
       real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0, fr1, fr3
+      type(freq_t), intent(in) :: fr0
+      type(freq_t), intent(in) :: fr1
+      type(freq_t), intent(in) :: fr3
       real(RD), intent(out)    :: r13(:)
 
-      real(RD) :: Delta_nu
-      integer  :: i0, i1, i3, end0, end1, end3, i, n
+      integer               :: i0
+      integer               :: i1
+      integer               :: i3
+      integer               :: end0
+      integer               :: end1
+      integer               :: end3
+      real(RD), allocatable :: x(:)
+      real(RD), allocatable :: y(:)
 
-      ! parameters for interpolant
-      real(RD), allocatable :: x(:), y(:)
-      integer, parameter    :: nwork = 6
-      real(RD), pointer     :: work1(:)
-      character(len=256)    :: interp_dbg_str
-      integer               :: ierr
+      @:CHECK_BOUNDS(SIZE(r13), SIZE(fr))
 
-      r13 = 0d0
+      ! Evaluate r13 frequency ratios, following Roxburgh & Vorontsov
+      ! (2003), eq. (7)
 
-      Delta_nu = fr0%Delta_nu()
+      ! Set up indices into the frequency arrays
 
-      i0 = 1
-      i1 = 1
-      i3 = 1
+      associate(Delta_nu => fr0%Delta_nu())
 
-      do while (fr1%nu(i1) < fr0%nu(i0))
-         i1 = i1 + 1
-      end do
+         i1 = FINDLOC(fr1%nu >= fr0%nu(1), .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i1 > 0, 'invalid i1')
 
-      do while (fr0%nu(i0) < fr1%nu(i1) - 0.75d0*Delta_nu)
-         i0 = i0 + 1
-      end do
+         i0 = FINDLOC(fr0%nu >= fr1%nu(i1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-      do while (fr3%nu(i3) < fr0%nu(i0))
-         i3 = i3 + 1
-      end do
+         i3 = FINDLOC(fr3%nu >= fr0%nu(i0), .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i3 > 0, 'invalid i3')
 
-      end0 = fr0%n
-      end1 = fr1%n
-      end3 = fr3%n
+         end1 = FINDLOC(fr1%nu <= fr0%nu(fr0%n), .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT_DEBUG(end1 > 0, 'invalid end1')
 
-      do while (fr1%nu(end1) > fr0%nu(end0))
-         end1 = end1 - 1
-      end do
+         end0 = FINDLOC(fr0%nu <= fr1%nu(end1) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT_DEBUG(end0 > 0, 'invalid end0')
 
-      do while (fr0%nu(end0) > fr1%nu(end1) + 0.75d0*Delta_nu)
-         end0 = end0 - 1
-      end do
+         end3 = FINDLOC(fr3%nu <= fr0%nu(end0), .TRUE., DIM=1, BACK=.TRUE.)
+         @:ASSERT_DEBUG(end3 > 0, 'invalid end3')
 
-      do while (fr3%nu(end3) > fr0%nu(end0))
-         end3 = end3 - 1
-      end do
+      end associate
 
-      n = end3 - i3 + 1
-      allocate(x(n), y(n))
-      x = 0d0
-      y = 0d0
+      ! Calculate frequency ratios
 
-      ! write(*,*) 'i0, i1, i3 =', i0, i1, i3
-      ! write(*,*) 'fr0(i0), fr1(i1), fr3(i3) =', fr0%nu(i0), fr1%nu(i1), fr3%nu(i3)
-      ! write(*,*) 'end0, end1 =', end0, end1, end3
-      ! write(*,*) 'fr0(end0), fr1(end1), fr3(end3) =', fr0%nu(end0), fr1%nu(end1), fr3%nu(end3)
-      ! write(*,*) 'n =', n
+      associate(n => end3 - i3 + 1)
 
-      do i = 0, n-1
-         x(i+1) = fr1%nu(i1+i)
-         y(i+1) = (fr1%nu(i1+i)-fr3%nu(i3+i))/(fr0%nu(i0+i+1)-fr0%nu(i0+i))
-      end do
+         x = fr1%nu(i1:i1+n-1)
+         y = (fr1%nu(i1:i1+n-1)-fr3%nu(i3:i3+n-1)) / (fr0%nu(i0+1:i0+n)-fr0%nu(i0:i0+n-1))
 
-      allocate(work1(nwork*size(x)))
-      call interpolate_vector(n, x, size(fr), fr, y, r13, interp_pm, &
-         nwork, work1, interp_dbg_str, ierr)
-      deallocate(work1, x, y)
+      end associate
 
-   end subroutine get_r13_
+      ! Interpolate onto the abscissa given by fr
+
+      r13 = interp_vec(x, y, fr, 'MONO')
+
+      ! Finish
+
+      return
+
+   end subroutine eval_r13_
 
    !****
 
@@ -563,26 +544,28 @@ contains
 
       type(freq_t), intent(in) :: fr_mod(0:3)
       integer, intent(in)      :: n_r010, n_r02, n_r13
-      real(RD), intent(in)     :: r_freq(:), r_obs(:), r_invcov(:,:)
+      real(RD), intent(in)     :: r_freq(:)
+      real(RD), intent(in)     :: r_obs(:)
+      real(RD), intent(in)     :: r_invcov(:,:)
       real(RD), intent(out)    :: chi2
 
       real(RD), allocatable :: r_mod(:)
       integer               :: n_r, i, j
 
       n_r = n_r010 + n_r02 + n_r13
-      allocate(r_mod(n_r))
-      r_mod = 0d0
 
-      if (n_r010 > 0) call get_r010_(r_freq(1:n_r010), fr_mod(0), fr_mod(1), r_mod(1:n_r010))
-      if (n_r02 > 0) call get_r02_(r_freq(n_r010+1:n_r010+n_r02), &
+      allocate(r_mod(n_r))
+      r_mod = 0._RD
+
+      if (n_r010 > 0) call eval_r010_(r_freq(1:n_r010), fr_mod(0), fr_mod(1), r_mod(1:n_r010))
+      if (n_r02 > 0) call eval_r02_(r_freq(n_r010+1:n_r010+n_r02), &
          fr_mod(0), fr_mod(1), fr_mod(2), r_mod(n_r010+1:n_r010+n_r02))
-      if (n_r13 > 0) call get_r13_(r_freq(n_r010+n_r02+1:n_r), &
+      if (n_r13 > 0) call eval_r13_(r_freq(n_r010+n_r02+1:n_r), &
          fr_mod(0), fr_mod(1), fr_mod(3), r_mod(n_r010+n_r02+1:n_r))
 
-      chi2 = 0d0
-      ! write(*,*) '          i               r_freq                          r_mod                     r_obs'
+      chi2 = 0._RD
+
       do i = 1, n_r
-         ! write(*,*) i, r_freq(i), r_mod(i), r_obs(i)
          do j = 1, n_r
             chi2 = chi2 + (r_mod(i)-r_obs(i))*r_invcov(i,j)*(r_mod(j)-r_obs(j))
          end do
