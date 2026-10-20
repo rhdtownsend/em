@@ -60,6 +60,9 @@ module em_m
    public :: get_mod_data
    public :: apply_cubic_correction
    public :: apply_combined_correction
+   public :: eval_chisq_radial
+   public :: eval_chisq_all
+   public :: eval_chisq_ratios
    public :: t_ok
    public :: t_max_age
 

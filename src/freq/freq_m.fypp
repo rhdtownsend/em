@@ -16,6 +16,8 @@ module freq_m
    use interp_m
    use utils_m
 
+   use f95_lapack
+
    use ISO_FORTRAN_ENV
 
    ! No implicit typing
@@ -39,6 +41,12 @@ module freq_m
       procedure, public :: Delta_nu
    end type freq_t
 
+   type :: ratio_t
+      real(RD), allocatable :: nu(:)
+      real(RD), allocatable :: ratio(:)
+      integer               :: n = 0
+   end type ratio_t
+
    ! Module variables
 
    type(freq_t), save :: fr_obs_m(0:L_MAX) ! Observed frequencies
@@ -60,9 +68,13 @@ module freq_m
    public :: set_mod_freqs
    public :: get_obs_freqs
    public :: get_mod_freqs
-   public :: chi2_radial
    public :: apply_cubic_correction
    public :: apply_combined_correction
+   public :: eval_chisq_radial
+   public :: eval_chisq_all
+   public :: eval_chisq_ratios
+
+   ! Procedures
 
 contains
 
@@ -199,27 +211,142 @@ contains
 
    !****
 
-   subroutine chi2_radial(fr_mod, fr_obs, chi2)
+   subroutine eval_chisq_radial(fr_mod, fr_obs, chisq)
 
-      type(freq_t), intent(in) :: fr_mod(0:3)
-      type(freq_t), intent(in) :: fr_obs(0:3)
-      real(RD), intent(out)    :: chi2
-      integer                  :: i
+      type(freq_t), intent(in) :: fr_mod(0:)
+      type(freq_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)    :: chisq
 
-      chi2 = 0._RD
-      do i = 1, fr_obs(0)%n
-         chi2 = chi2 + (fr_mod(0)%nu(i)-fr_obs(0)%nu(i))**2/fr_obs(0)%dnu(i)**2
+      ! Evaluate the chisq for observed vs model frequencies, radial
+      ! modes only
+
+      chisq = SUM((fr_mod(0)%nu - fr_obs(0)%nu)**2/fr_obs(0)%dnu**2)
+
+      ! Finish
+
+   end subroutine eval_chisq_radial
+
+   !****
+
+   subroutine eval_chisq_all(fr_mod, fr_obs, chisq)
+
+      type(freq_t), intent(in) :: fr_mod(0:)
+      type(freq_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)    :: chisq
+
+      integer :: l
+
+      ! Evaluate the chisq for observed vs model frequencies, all
+      ! modes
+
+      chisq = 0._RD
+
+      do l = 0, 3
+         chisq = chisq + SUM((fr_mod(l)%nu - fr_obs(l)%nu)**2/fr_obs(l)%dnu**2)
       end do
 
-   end subroutine chi2_radial
+      ! Finish
+
+   end subroutine eval_chisq_all
+
+   !****
+
+   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq)
+
+      type(freq_t), intent(in) :: fr_mod(0:)
+      type(freq_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)    :: chisq
+
+      type(ratio_t)         :: rt_010_obs
+      type(ratio_t)         :: rt_02_obs
+      type(ratio_t)         :: rt_13_obs
+      type(ratio_t)         :: rt_010_mod
+      type(ratio_t)         :: rt_02_mod
+      type(ratio_t)         :: rt_13_mod
+      integer               :: n
+      real(RD), allocatable :: J(:,:)
+      integer               :: i
+      integer               :: l
+      integer               :: k
+      real(RD), allocatable :: dr010_dnu(:)
+      real(RD), allocatable :: dr02_dnu(:)
+      real(RD), allocatable :: dr13_dnu(:)
+      real(RD), allocatable :: delta_ratio(:)
+      real(RD), allocatable :: C(:,:)
+      real(RD), allocatable :: inv_C_delta_ratio(:)
+
+      ! Evaluate the chisq for observed vs model frequency *ratios*
+
+      ! First, evaluate frequency ratios for both observed and model
+      ! data (interpolating the ratios for the latter onto the
+      ! frequencies of the former)
+
+      call eval_ratios_r010_(fr_obs, rt_010_obs)
+      call eval_ratios_r02_(fr_obs, rt_02_obs)
+      call eval_ratios_r13_(fr_obs, rt_13_obs)
+
+      call eval_ratios_r010_(fr_mod, rt_010_mod, rt_010_obs)
+      call eval_ratios_r02_(fr_mod, rt_02_mod, rt_02_obs)
+      call eval_ratios_r13_(fr_mod, rt_13_mod, rt_13_obs)
+
+      ! Construct the Jacobian matrix (with errors folded in) by
+      ! performing finite-differencing on the observed frequencies
+
+      n = rt_010_obs%n + rt_02_obs%n + rt_13_obs%n
+
+      allocate(J(n,SUM(fr_obs%n)))
+
+      i = 1
+
+      do l = 0, L_MAX
+         do k = 1, fr_obs(l)%n
+
+            ! Evaluate the derivatives of the ratios
+
+            call eval_ratios_deriv_(fr_obs, k, l, eval_ratios_r010_, dr010_dnu)
+            call eval_ratios_deriv_(fr_obs, k, l, eval_ratios_r02_, dr02_dnu)
+            call eval_ratios_deriv_(fr_obs, k, l, eval_ratios_r13_, dr13_dnu)
+
+            ! Store in a column of the Jacobian matrix, folding in the
+            ! error associated with this observed frequency
+
+            J(:,i) = [dr010_dnu,dr02_dnu,dr13_dnu] * fr_obs(l)%dnu(k)
+
+            i = i + 1
+
+         end do
+      end do
+
+
+      ! Evaluate the covariance matrix
+
+      C = MATMUL(J, TRANSPOSE(J))
+
+      ! Evaluate the chisq
+
+      delta_ratio = &
+         [rt_010_mod%ratio,rt_02_mod%ratio,rt_13_mod%ratio] - &
+         [rt_010_obs%ratio,rt_02_obs%ratio,rt_13_obs%ratio]
+
+      inv_C_delta_ratio = delta_ratio
+
+      call LA_GESV(C, inv_C_delta_ratio)
+
+      chisq = DOT_PRODUCT(delta_ratio, inv_C_delta_ratio)
+
+      ! Finish
+
+      return
+
+   end subroutine eval_chisq_ratios
 
    !****
 
    subroutine apply_cubic_correction(fr_mod, fr_obs, fr_cor)
 
-      type(freq_t), intent(in)  :: fr_mod(0:3)
-      type(freq_t), intent(in)  :: fr_obs(0:3)
-      type(freq_t), intent(out) :: fr_cor(0:3)
+      type(freq_t), intent(in)  :: fr_obs(0:)
+      type(freq_t), intent(in)  :: fr_mod(0:)
+      type(freq_t), intent(out) :: fr_cor(0:)
 
       real(RD) :: X, y, XtX, Xty
       integer  :: i, l
@@ -261,9 +388,9 @@ contains
 
    subroutine apply_combined_correction(fr_mod, fr_obs, fr_cor)
 
-      type(freq_t), intent(in)  :: fr_mod(0:3)
-      type(freq_t), intent(in)  :: fr_obs(0:3)
-      type(freq_t), intent(out) :: fr_cor(0:3)
+      type(freq_t), intent(in)  :: fr_mod(0:)
+      type(freq_t), intent(in)  :: fr_obs(0:)
+      type(freq_t), intent(out) :: fr_cor(0:)
 
       real(RD) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
       integer  :: i, l
@@ -320,12 +447,11 @@ contains
 
    !****
 
-   subroutine eval_r010_(fr, fr0, fr1, r010)
+   subroutine eval_ratios_r010_(fr, rt, rt_in)
 
-      real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0
-      type(freq_t), intent(in) :: fr1
-      real(RD), intent(out)    :: r010(:)
+      type(freq_t), intent(in)            :: fr(0:)
+      type(ratio_t), intent(out)          :: rt
+      type(ratio_t), intent(in), optional :: rt_in
 
       integer               :: i0
       integer               :: i1
@@ -339,25 +465,25 @@ contains
       real(RD), allocatable :: y(:)
       integer, allocatable  :: j(:)
 
-      @:CHECK_BOUNDS(SIZE(r010), SIZE(fr))
-
       ! Evaluate r01 and r10 frequency ratios, following Roxburgh &
-      ! Vorontsov (2003), eq. (8)
+      ! Vorontsov (2003), eq. (8). The ratio data are returned in
+      ! rt. If rt_in is present, they are first interpolated onto the
+      ! frequency abscissa of rt_in
 
       ! Set up indices into the frequency arrays
 
-      associate(Delta_nu => fr0%Delta_nu())
+      associate(Delta_nu => fr(0)%Delta_nu())
 
-         i0 = FINDLOC(fr0%nu >= fr1%nu(1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         i0 = FINDLOC(fr(0)%nu >= fr(1)%nu(1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
          @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-         i1 = FINDLOC(fr1%nu >= fr0%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
-         @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
+         i1 = FINDLOC(fr(1)%nu >= fr(0)%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         @:ASSERT_DEBUG(i0 > 0, 'invalid i1')
 
-         end0 = FINDLOC(fr0%nu <= fr1%nu(fr1%n) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         end0 = FINDLOC(fr(0)%nu <= fr(1)%nu(fr(1)%n) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT_DEBUG(end0 > 0, 'invalid end0')
 
-         end1 = FINDLOC(fr1%nu <= fr0%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         end1 = FINDLOC(fr(1)%nu <= fr(0)%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT_DEBUG(end1 > 0, 'invalid end1')
 
       end associate
@@ -368,9 +494,9 @@ contains
 
       associate(n => end0 - i0 - 1)
 
-         x0 = fr0%nu(i0+1:i0+n)
-         y0 = (fr0%nu(i0:i0+n-1) - 4._RD*fr1%nu(i1:i1+n-1) + 6._RD*fr0%nu(i0+1:i0+n) - &
-            4._RD*fr1%nu(i1+1:i1+n) + fr0%nu(i0+2:i0+n+1)) / 8._RD / (fr1%nu(i1+1:i1+n) - fr1%nu(i1:i1+n-1))
+         x0 = fr(0)%nu(i0+1:i0+n)
+         y0 = (fr(0)%nu(i0:i0+n-1) - 4._RD*fr(1)%nu(i1:i1+n-1) + 6._RD*fr(0)%nu(i0+1:i0+n) - &
+            4._RD*fr(1)%nu(i1+1:i1+n) + fr(0)%nu(i0+2:i0+n+1)) / 8._RD / (fr(1)%nu(i1+1:i1+n) - fr(1)%nu(i1:i1+n-1))
 
       end associate
 
@@ -378,13 +504,13 @@ contains
 
       associate(n => end1 - i1 - 1)
 
-         x1 = fr1%nu(i1+1:i1+n)
-         y1 = (fr1%nu(i1:i1+n) - 4._RD*fr0%nu(i0:i0+n-1) + 6._RD*fr1%nu(i1+1:i1+n) - &
-            4._RD*fr0%nu(i0+1:i0+n) + fr1%nu(i1+2:i1+n+1)) / 8._RD / (fr0%nu(i0+1:i0+n) - fr0%nu(i0:i0+n-1))
+         x1 = fr(1)%nu(i1+1:i1+n)
+         y1 = (fr(1)%nu(i1:i1+n-1) - 4._RD*fr(0)%nu(i0:i0+n-1) + 6._RD*fr(1)%nu(i1+1:i1+n) - &
+            4._RD*fr(0)%nu(i0+1:i0+n) + fr(1)%nu(i1+2:i1+n+1)) / 8._RD / (fr(0)%nu(i0+1:i0+n) - fr(0)%nu(i0:i0+n-1))
 
       end associate
 
-      ! Merge the two arrays, in frequency order
+      ! Merge the two sets of ratios
 
       x = [x0,x1]
       y = [y0,y1]
@@ -394,25 +520,35 @@ contains
       x = x(j)
       y = y(j)
 
-      ! Interpolate onto the abscissa given by fr
+      ! Store into rt, interpolating if necessary
 
-      r010 = interp_vec(x, y, fr, 'MONO')
+      if (PRESENT(rt_in)) then
+
+         rt%nu = rt_in%nu
+         rt%ratio = interp_vec(x, y, rt%nu, 'MONO')
+
+      else
+
+         rt%nu = x
+         rt%ratio = y
+
+      end if
+
+      rt%n = SIZE(rt%nu)
 
       ! Finish
 
       return
 
-   end subroutine eval_r010_
+   end subroutine eval_ratios_r010_
 
    !****
 
-   subroutine eval_r02_(fr, fr0, fr1, fr2, r02)
+   subroutine eval_ratios_r02_(fr, rt, rt_in)
 
-      real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0
-      type(freq_t), intent(in) :: fr1
-      type(freq_t), intent(in) :: fr2
-      real(RD), intent(out)    :: r02(:)
+      type(freq_t), intent(in)            :: fr(0:)
+      type(ratio_t), intent(out)          :: rt
+      type(ratio_t), intent(in), optional :: rt_in
 
       integer               :: i0
       integer               :: i1
@@ -423,31 +559,29 @@ contains
       real(RD), allocatable :: x(:)
       real(RD), allocatable :: y(:)
 
-      @:CHECK_BOUNDS(SIZE(r02), SIZE(fr))
-
       ! Evaluate r02 frequency ratios, following Roxburgh & Vorontsov
-      ! (2003), eqn. (7)
+      ! (2003), eqn. (7). The ratio data are returned in rt
 
       ! Set up indices into the frequency arrays
 
-      associate(Delta_nu => fr0%Delta_nu())
+      associate(Delta_nu => fr(0)%Delta_nu())
 
-         i0 = FINDLOC(fr0%nu >= fr1%nu(1), .TRUE., DIM=1)
+         i0 = FINDLOC(fr(0)%nu >= fr(1)%nu(1), .TRUE., DIM=1)
          @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-         i1 = FINDLOC(fr1%nu >= fr0%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         i1 = FINDLOC(fr(1)%nu >= fr(0)%nu(i0) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
          @:ASSERT_DEBUG(i1 > 0, 'invalid i1')
 
-         i2 = FINDLOC(fr2%nu >= fr1%nu(i1), .TRUE., DIM=1)
+         i2 = FINDLOC(fr(2)%nu >= fr(1)%nu(i1), .TRUE., DIM=1)
          @:ASSERT_DEBUG(i2 > 0, 'invalid i2')
 
-         end0 = FINDLOC(fr0%nu <= fr1%nu(fr0%n), .TRUE., DIM=1, BACK=.TRUE.)
+         end0 = FINDLOC(fr(0)%nu <= fr(1)%nu(fr(0)%n), .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT(end0 > 0, 'invalid end0')
 
-         end1 = FINDLOC(fr1%nu <= fr0%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         end1 = FINDLOC(fr(1)%nu <= fr(0)%nu(end0) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT(end0 > 0, 'invalid end1')
 
-         end2 = FINDLOC(fr2%nu <= fr1%nu(end1), .TRUE., DIM=1, BACK=.TRUE.)
+         end2 = FINDLOC(fr(2)%nu <= fr(1)%nu(end1), .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT(end0 > 0, 'invalid end2')
 
       end associate
@@ -456,30 +590,43 @@ contains
 
       associate(n => end2 - i2 + 1)
 
-         x = fr0%nu(i0:i0+n-1)
-         y = (fr0%nu(i0:i0+n-1)-fr2%nu(i2:i2+n-1)) / (fr1%nu(i1+1:i1+n)-fr1%nu(i1:i1+n-1))
+         x = fr(0)%nu(i0:i0+n-1)
+         y = (fr(0)%nu(i0:i0+n-1)-fr(2)%nu(i2:i2+n-1)) / (fr(1)%nu(i1+1:i1+n)-fr(1)%nu(i1:i1+n-1))
 
       end associate
 
-      ! Interpolate onto the abscissa given by fr
+      ! Store into rt, interpolating if necessary
 
-      r02 = interp_vec(x, y, fr, 'MONO')
+      if (PRESENT(rt_in)) then
+
+         @:ASSERT_DEBUG(ALL(rt_in%nu >= x(1)), 'out-of-bounds')
+         @:ASSERT_DEBUG(ALL(rt_in%nu <= x(SIZE(x))), 'out-of-bounds')
+
+         rt%nu = rt_in%nu
+         rt%ratio = interp_vec(x, y, rt%nu, 'MONO')
+
+      else
+
+         rt%nu = x
+         rt%ratio = y
+
+      end if
+
+      rt%n = SIZE(rt%nu)
 
       ! Finish
 
       return
 
-   end subroutine eval_r02_
+   end subroutine eval_ratios_r02_
 
    !****
 
-   subroutine eval_r13_(fr, fr0, fr1, fr3, r13)
+   subroutine eval_ratios_r13_(fr, rt, rt_in)
 
-      real(RD), intent(in)     :: fr(:)
-      type(freq_t), intent(in) :: fr0
-      type(freq_t), intent(in) :: fr1
-      type(freq_t), intent(in) :: fr3
-      real(RD), intent(out)    :: r13(:)
+      type(freq_t), intent(in)            :: fr(0:)
+      type(ratio_t), intent(out)          :: rt
+      type(ratio_t), intent(in), optional :: rt_in
 
       integer               :: i0
       integer               :: i1
@@ -490,31 +637,29 @@ contains
       real(RD), allocatable :: x(:)
       real(RD), allocatable :: y(:)
 
-      @:CHECK_BOUNDS(SIZE(r13), SIZE(fr))
-
       ! Evaluate r13 frequency ratios, following Roxburgh & Vorontsov
-      ! (2003), eq. (7)
+      ! (2003), eq. (7). The ratio data are returned in rt
 
       ! Set up indices into the frequency arrays
 
-      associate(Delta_nu => fr0%Delta_nu())
+      associate(Delta_nu => fr(0)%Delta_nu())
 
-         i1 = FINDLOC(fr1%nu >= fr0%nu(1), .TRUE., DIM=1)
+         i1 = FINDLOC(fr(1)%nu >= fr(0)%nu(1), .TRUE., DIM=1)
          @:ASSERT_DEBUG(i1 > 0, 'invalid i1')
 
-         i0 = FINDLOC(fr0%nu >= fr1%nu(i1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
+         i0 = FINDLOC(fr(0)%nu >= fr(1)%nu(i1) - 0.75_RD*Delta_nu, .TRUE., DIM=1)
          @:ASSERT_DEBUG(i0 > 0, 'invalid i0')
 
-         i3 = FINDLOC(fr3%nu >= fr0%nu(i0), .TRUE., DIM=1)
+         i3 = FINDLOC(fr(3)%nu >= fr(0)%nu(i0), .TRUE., DIM=1)
          @:ASSERT_DEBUG(i3 > 0, 'invalid i3')
 
-         end1 = FINDLOC(fr1%nu <= fr0%nu(fr0%n), .TRUE., DIM=1, BACK=.TRUE.)
+         end1 = FINDLOC(fr(1)%nu <= fr(0)%nu(fr(0)%n), .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT_DEBUG(end1 > 0, 'invalid end1')
 
-         end0 = FINDLOC(fr0%nu <= fr1%nu(end1) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
+         end0 = FINDLOC(fr(0)%nu <= fr(1)%nu(end1) + 0.75_RD*Delta_nu, .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT_DEBUG(end0 > 0, 'invalid end0')
 
-         end3 = FINDLOC(fr3%nu <= fr0%nu(end0), .TRUE., DIM=1, BACK=.TRUE.)
+         end3 = FINDLOC(fr(3)%nu <= fr(0)%nu(end0), .TRUE., DIM=1, BACK=.TRUE.)
          @:ASSERT_DEBUG(end3 > 0, 'invalid end3')
 
       end associate
@@ -523,57 +668,90 @@ contains
 
       associate(n => end3 - i3 + 1)
 
-         x = fr1%nu(i1:i1+n-1)
-         y = (fr1%nu(i1:i1+n-1)-fr3%nu(i3:i3+n-1)) / (fr0%nu(i0+1:i0+n)-fr0%nu(i0:i0+n-1))
+         x = fr(1)%nu(i1:i1+n-1)
+         y = (fr(1)%nu(i1:i1+n-1)-fr(3)%nu(i3:i3+n-1)) / (fr(0)%nu(i0+1:i0+n)-fr(0)%nu(i0:i0+n-1))
 
       end associate
 
-      ! Interpolate onto the abscissa given by fr
+      ! Store into rt, interpolating if necessary
 
-      r13 = interp_vec(x, y, fr, 'MONO')
+      if (PRESENT(rt_in)) then
+
+         @:ASSERT_DEBUG(ALL(rt_in%nu >= x(1)), 'out-of-bounds')
+         @:ASSERT_DEBUG(ALL(rt_in%nu <= x(SIZE(x))), 'out-of-bounds')
+
+         rt%nu = rt_in%nu
+         rt%ratio = interp_vec(x, y, rt%nu, 'MONO')
+
+      else
+
+         rt%nu = x
+         rt%ratio = y
+
+      end if
+
+      rt%n = SIZE(rt%nu)
 
       ! Finish
 
       return
 
-   end subroutine eval_r13_
+   end subroutine eval_ratios_r13_
 
    !****
 
-   subroutine chi2_ratios_(n_r010, n_r02, n_r13, r_freq, r_obs, r_invcov, fr_mod, chi2)
+   subroutine eval_ratios_deriv_(fr, k, l, eval_ratios_, dr_dnu)
 
-      type(freq_t), intent(in) :: fr_mod(0:3)
-      integer, intent(in)      :: n_r010, n_r02, n_r13
-      real(RD), intent(in)     :: r_freq(:)
-      real(RD), intent(in)     :: r_obs(:)
-      real(RD), intent(in)     :: r_invcov(:,:)
-      real(RD), intent(out)    :: chi2
+      type(freq_t), intent(in) :: fr(0:)
+      integer, intent(in)      :: k
+      integer, intent(in)      :: l
+      interface
+         subroutine eval_ratios_(fr, rt, rt_in)
+            import freq_t
+            import ratio_t
+            implicit none (type, external)
+            type(freq_t), intent(in)            :: fr(0:)
+            type(ratio_t), intent(out)          :: rt
+            type(ratio_t), intent(in), optional :: rt_in
+         end subroutine eval_ratios_
+      end interface
+      real(RD), allocatable, intent(out) :: dr_dnu(:)
 
-      real(RD), allocatable :: r_mod(:)
-      integer               :: n_r, i, j
+      real(RD)      :: h
+      type(freq_t)  :: fr_a(0:L_MAX)
+      type(freq_t)  :: fr_b(0:L_MAX)
+      type(ratio_t) :: rt_a
+      type(ratio_t) :: rt_b
 
-      n_r = n_r010 + n_r02 + n_r13
+      ! Evaluate the derivative of ratios with respect to the
+      ! frequency fr(l)%nu(k), using finite differences
 
-      allocate(r_mod(n_r))
-      r_mod = 0._RD
+      ! Choose step size
 
-      if (n_r010 > 0) call eval_r010_(r_freq(1:n_r010), fr_mod(0), fr_mod(1), r_mod(1:n_r010))
-      if (n_r02 > 0) call eval_r02_(r_freq(n_r010+1:n_r010+n_r02), &
-         fr_mod(0), fr_mod(1), fr_mod(2), r_mod(n_r010+1:n_r010+n_r02))
-      if (n_r13 > 0) call eval_r13_(r_freq(n_r010+n_r02+1:n_r), &
-         fr_mod(0), fr_mod(1), fr_mod(3), r_mod(n_r010+n_r02+1:n_r))
+      h = MAX(1E-5_RD*fr(l)%dnu(k), 1E-6_RD)
 
-      chi2 = 0._RD
+      ! Calculate offset frequencies
 
-      do i = 1, n_r
-         do j = 1, n_r
-            chi2 = chi2 + (r_mod(i)-r_obs(i))*r_invcov(i,j)*(r_mod(j)-r_obs(j))
-         end do
-      end do
+      fr_a = fr
+      fr_a(l)%nu(k) = fr_a(l)%nu(k) - h
 
-      deallocate(r_mod)
+      fr_b = fr
+      fr_b(l)%nu(k) = fr_b(l)%nu(k) + h
 
-   end subroutine chi2_ratios_
+      ! Evaluate ratios at these frequencies
+
+      call eval_ratios_(fr_a, rt_a)
+      call eval_ratios_(fr_b, rt_b)
+
+      ! Evaluate the derivative
+
+      dr_dnu = (rt_b%ratio - rt_a%ratio) / (2._RD*h)
+
+      ! Finish
+
+      return
+
+   end subroutine eval_ratios_deriv_
 
    !****
 

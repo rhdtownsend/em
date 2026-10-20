@@ -1,4 +1,6 @@
-real(RS) function userff (npar, data, myid)
+#:include 'forum.inc'
+
+real function userff (npar, data, myid)
 
    ! Uses
 
@@ -14,8 +16,8 @@ real(RS) function userff (npar, data, myid)
    ! Variables
 
    integer, intent(in)  :: npar
+   real(RD), intent(in) :: data(*)
    integer, intent(in)  :: myid
-   real(RD), intent(in) :: data(:)
 
    integer :: unit
    integer :: n
@@ -28,7 +30,8 @@ real(RS) function userff (npar, data, myid)
    integer :: id
    integer :: t_code
    integer :: i
-   integer :: j
+   integer :: iwflag
+   integer :: isflag
 
    integer, dimension(5) :: spec
 
@@ -61,8 +64,8 @@ real(RS) function userff (npar, data, myid)
    real(RD) :: Y_mod
    real(RD) :: alpha_mod
    real(RD) :: age
-   real(RD) :: resid
    real(RD) :: chisq_r
+   real(RD) :: chisq_s
 
    real(RD), dimension(:), allocatable :: nu0
    real(RD), dimension(:), allocatable :: dnu0
@@ -81,8 +84,6 @@ real(RS) function userff (npar, data, myid)
    type(freq_t) :: fr_mod(0:3)
    type(freq_t) :: fr_cor(0:3)
 
-   @:CHECK_BOUNDS(SIZE(data), npar)
-
    ! Initialize EM
 
    call init_em()
@@ -96,7 +97,7 @@ real(RS) function userff (npar, data, myid)
    l2=0
    l3=0
 
-   read(unit, *) n
+   read(unit, *) n,iwflag,isflag
 
    do i=1,n
       read(unit, *) ll
@@ -113,7 +114,7 @@ real(RS) function userff (npar, data, myid)
       ns=ns+1
    enddo
 
-50 close(unit)
+50 continue
 
    allocate ( nl0(l0) )
    allocate ( nl1(l1) )
@@ -134,7 +135,7 @@ real(RS) function userff (npar, data, myid)
 
    ! Read observational constraints
 
-   open(NEWUNIT=unit, FILE='obs.dat', STATUS='old', ACTION='read')
+   rewind(unit)
 
    l0=0
    l1=0
@@ -269,25 +270,33 @@ real(RS) function userff (npar, data, myid)
       if (spec(4) == 1) chisq_r = chisq_r + (R_o-R)*(R_o-R)/(R_e*R_e)
       if (spec(5) == 1) chisq_r = chisq_r + (L_o-L)*(L_o-L)/(L_e*L_e)
 
-      ! Get corrected frequencies
+      ! Add in the asteroseismic contribution to chisq...
 
-      call apply_combined_correction(fr_mod, fr_obs, fr_cor)
+      if (isflag == 0) then
 
-      ! Calculate seismic chisq
+         ! ...using frequency ratios
 
-      do i = 0, 3
-         do j = 1, fr_obs(i)%n
-            resid = (fr_obs(i)%nu(j)-fr_cor(i)%nu(j))/fr_obs(i)%dnu(j)
-            chisq_r = chisq_r + resid*resid
-            if(myid == 0) print *, i, fr_mod(i)%n_pg(j), fr_obs(i)%nu(j), fr_obs(i)%dnu(j), fr_cor(i)%nu(j), resid
-         end do
-      end do
+         call eval_chisq_ratios(fr_mod, fr_obs, chisq_s)
 
-      userff = float(n+ns-5)/chisq_r
+      else
+
+         ! ...using (corrected) frequencies
+
+         call apply_combined_correction(fr_mod, fr_obs, fr_cor)
+
+         call eval_chisq_all(fr_cor, fr_obs, chisq_s)
+
+      end if
+
+      chisq_r = chisq_r + chisq_s
+
+      ! Set the return value
+
+      userff = REAL((n+ns-5)/chisq_r)
 
    else
 
-      userff = TINY(0._RS)
+      userff = TINY(0.)
 
    endif
 

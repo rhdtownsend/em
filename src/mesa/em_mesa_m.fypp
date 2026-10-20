@@ -651,7 +651,7 @@ contains
          ! Update discriminants
 
          y = nu_mod_lo - nu_obs_lo
-         call chi2_radial(fr_cor, fr_obs, z)
+         call eval_chisq_radial(fr_obs, fr_cor, z)
 
          if (DEBUG) then
             write(OUTPUT_UNIT, *) 'y =', y, ';  z =', z, '; nu_mod_lo =', nu_mod_lo
