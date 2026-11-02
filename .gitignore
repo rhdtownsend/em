@@ -4,8 +4,8 @@
 *.o
 *.mod
 
-bin
-lib
-include
+/bin/
+/lib/
+/include/
 
 
