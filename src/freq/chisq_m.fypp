@@ -76,11 +76,12 @@ contains
 
    !****
 
-   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq)
+   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq, n_ratio)
 
       type(freqs_t), intent(in) :: fr_mod(0:)
       type(freqs_t), intent(in) :: fr_obs(0:)
       real(RD), intent(out)     :: chisq
+      integer, intent(out)      :: n_ratio
 
       logical, parameter :: DEBUG = .FALSE.
 
@@ -173,6 +174,13 @@ contains
       call LA_GESV(C, inv_C_delta_ratio)
 
       chisq = DOT_PRODUCT(delta_ratio, inv_C_delta_ratio)
+
+      ! Count the ratios for the degrees of freedom. Both r01 and r10
+      ! contribute to the chisq, but they are built from the same
+      ! l=0 and l=1 modes; to avoid double-counting those modes, only
+      ! r01 is included in the count
+
+      n_ratio = COUNT(rt_010_obs%label == 'r01') + rt_02_obs%n + rt_13_obs%n
 
       ! Finish
 

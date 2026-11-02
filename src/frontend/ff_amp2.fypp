@@ -22,6 +22,7 @@ real function userff (npar, data, myid)
    integer :: unit
    integer :: n
    integer :: ns
+   integer :: n_seis
    integer :: ll
    integer :: l0
    integer :: l1
@@ -267,7 +268,7 @@ real function userff (npar, data, myid)
 
          ! ...using frequency ratios
 
-         call eval_chisq_ratios(fr_mod, fr_obs, chisq_s)
+         call eval_chisq_ratios(fr_mod, fr_obs, chisq_s, n_seis)
 
       else
 
@@ -277,13 +278,15 @@ real function userff (npar, data, myid)
 
          call eval_chisq_all(fr_cor, fr_obs, chisq_s)
 
+         n_seis = n
+
       end if
 
       chisq_r = chisq_r + chisq_s
 
       ! Set the return value
 
-      userff = REAL((n+ns-5)/chisq_r)
+      userff = REAL((n_seis+ns-5)/chisq_r)
 
    else
 
