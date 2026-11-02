@@ -12,7 +12,8 @@ module em_m
    use forum_m, only: RD
    use gyre_m, only: init_math
 
-   use freq_m
+   use freqs_m
+   use chisq_m
    use em_gyre_m
    use em_mesa_m
 
@@ -54,7 +55,7 @@ module em_m
    public :: evolve_star_to_log_g
    public :: evolve_star_seismic
    public :: destroy_star
-   public :: freq_t
+   public :: freqs_t
    public :: set_obs_freqs
    public :: get_mod_freqs
    public :: get_mod_data
@@ -75,7 +76,7 @@ contains
       ! Initialize
 
       do l = 0, L_MAX
-         call set_obs_freqs(l, freq_t())
+         call set_obs_freqs(l, freqs_t())
       end do
 
       call init_math()

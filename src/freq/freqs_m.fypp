@@ -1,0 +1,524 @@
+! Module  : freqs_m
+! Purpose : frequency data storage & manipulation
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'em.inc'
+
+#:include 'forum.inc'
+
+module freqs_m
+
+   ! Uses
+
+   use forum_m, only: RD, sort_indices
+
+   use utils_m
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none (type, external)
+
+   ! Parameter definitions
+
+   integer, parameter :: L_MAX = 3
+
+   ! Derived-type definitions
+
+   type :: freqs_t
+      real(RD), allocatable :: nu(:)
+      real(RD), allocatable :: dnu(:)
+      integer, allocatable  :: n_pg(:)
+      real(RD), allocatable :: E_norm(:)
+      integer               :: n = 0
+   contains
+      private
+      procedure, public :: Delta_nu
+   end type freqs_t
+
+   ! Module variables
+
+   type(freqs_t), save :: fr_obs_m(0:L_MAX) ! Observed frequencies
+   type(freqs_t), save :: fr_mod_m(0:L_MAX) ! Raw model frequencies
+
+   ! Interfaces
+
+   interface freqs_t
+      module procedure freqs_t_
+      module procedure freqs_t_auto_
+   end interface freqs_t
+
+   ! Access specifiers
+
+   private
+
+   public :: L_MAX
+   public :: freqs_t
+   public :: check_mod_orders
+   public :: set_obs_freqs
+   public :: set_mod_freqs
+   public :: get_obs_freqs
+   public :: get_mod_freqs
+   public :: apply_cubic_correction
+   public :: apply_combined_correction
+
+   ! Procedures
+
+contains
+
+   function freqs_t_(nu, dnu, E_norm, n_pg) result(fr)
+
+      real(RD), intent(in) :: nu(:)
+      real(RD), intent(in) :: dnu(:)
+      real(RD), intent(in) :: E_norm(:)
+      integer, intent(in)  :: n_pg(:)
+      type(freqs_t)        :: fr
+
+      integer :: i(SIZE(nu))
+
+      @:CHECK_BOUNDS(SIZE(dnu), SIZE(nu))
+      @:CHECK_BOUNDS(SIZE(E_norm), SIZE(nu))
+      @:CHECK_BOUNDS(SIZE(n_pg), SIZE(nu))
+
+      ! Construct the freqs_t
+
+      i = sort_indices(nu)
+
+      fr%nu = nu(i)
+      fr%dnu = dnu(i)
+
+      fr%E_norm = E_norm(i)
+
+      fr%n_pg = n_pg(i)
+
+      fr%n = SIZE(nu)
+
+      ! Finish
+
+      return
+
+   end function freqs_t_
+
+   !****
+
+   function freqs_t_auto_(nu, dnu, E_norm, l, fr_0) result(fr)
+
+      real(RD), intent(in)                :: nu(:)
+      real(RD), intent(in)                :: dnu(:)
+      real(RD), intent(in)                :: E_norm(:)
+      integer, intent(in)                 :: l
+      type(freqs_t), intent(in), optional :: fr_0
+      type(freqs_t)                       :: fr
+
+      logical :: unique
+
+      ! Construct the freqs_t, with radial orders assigned from the
+      ! asymptotic relation (see set_orders_). When l > 0, fr_0 must
+      ! be present, and supply the radial modes (themselves
+      ! constructed using this routine)
+
+      fr = freqs_t_(nu, dnu, E_norm, SPREAD(0, DIM=1, NCOPIES=SIZE(nu)))
+
+      if (l == 0) then
+         @:ASSERT(.NOT. PRESENT(fr_0), 'unexpected fr_0')
+         call set_orders_(fr, l)
+      else
+         @:ASSERT(PRESENT(fr_0), 'missing fr_0')
+         call set_orders_(fr, l, fr_0)
+      end if
+
+      ! Check that no two modes have the same order (since modes are
+      ! sorted in frequency, any duplicates are adjacent)
+
+      if (fr%n > 1) then
+         unique = ALL(fr%n_pg(2:) /= fr%n_pg(:fr%n-1))
+         @:ASSERT(unique, 'duplicate radial order')
+      end if
+
+      ! Finish
+
+      return
+
+   end function freqs_t_auto_
+
+   !****
+
+   function Delta_nu(fr)
+
+      class(freqs_t), intent(in) :: fr
+      real(RD)                   :: Delta_nu
+
+      real(RD) :: a
+      real(RD) :: b
+
+      ! Determine Delta_nu using a linear fit
+
+      call linear_fit(REAL(fr%n_pg, RD), fr%nu, fr%dnu, a, b)
+
+      Delta_nu = b
+
+      ! Finish
+
+      return
+
+   end function Delta_nu
+
+   !****
+
+   subroutine set_orders_(fr, l, fr_0)
+
+      type(freqs_t), intent(inout)        :: fr
+      integer, intent(in)                 :: l
+      type(freqs_t), intent(in), optional :: fr_0
+
+      real(RD), parameter :: EPS_GUESS = 1.3_RD
+
+      real(RD), allocatable :: d(:)
+      real(RD)              :: Delta_nu_approx
+      integer               :: i
+      real(RD)              :: a
+      real(RD)              :: b
+
+      ! Set radial orders (fr%n_pg) using the asymptotic relation
+      ! nu(n,l) ~ Delta_nu (n + l/2 + eps). The orders are relative
+      ! (the zero point is only approximate), but are consistent
+      ! between harmonic degrees, in the sense that nu(n-1,2) lies
+      ! just below nu(n,0), nu(n,1) just above nu(n,0), and nu(n-1,3)
+      ! just below nu(n,1).
+      !
+      ! For l == 0, orders are assigned sequentially in frequency,
+      ! allowing for gaps (following AMP 1.3). For l > 0, they are
+      ! obtained from a linear fit to the radial modes in fr_0
+
+      if (l == 0) then
+
+         @:ASSERT(fr%n >= 2, 'too few radial modes to assign orders')
+
+         ! Estimate the large separation from the median spacing
+         ! between consecutive radial modes
+
+         d = fr%nu(2:) - fr%nu(:fr%n-1)
+         d = d(sort_indices(d))
+
+         Delta_nu_approx = d((SIZE(d)+1)/2)
+
+         ! Assign orders, stepping over gaps
+
+         fr%n_pg(1) = NINT(fr%nu(1)/Delta_nu_approx - EPS_GUESS)
+
+         do i = 2, fr%n
+            fr%n_pg(i) = fr%n_pg(i-1) + MAX(1, NINT((fr%nu(i) - fr%nu(i-1))/Delta_nu_approx))
+         end do
+
+      else
+
+         @:ASSERT(fr_0%n >= 2, 'too few radial modes to assign orders')
+
+         if (fr%n == 0) return
+
+         ! Fit nu = a + b*n to the radial modes, so that b is the
+         ! large separation and a/b is the phase offset eps
+
+         call linear_fit(REAL(fr_0%n_pg, RD), fr_0%nu, fr_0%dnu, a, b)
+
+         ! Assign orders
+
+         fr%n_pg = NINT((fr%nu - a)/b - 0.5_RD*l)
+
+      end if
+
+      ! Finish
+
+      return
+
+   end subroutine set_orders_
+
+   !****
+
+   subroutine check_mod_orders(fr)
+
+      type(freqs_t), intent(in) :: fr(0:)
+
+      type(freqs_t) :: fr_chk
+      integer       :: l
+      integer       :: n_bad
+
+      ! Check that the radial orders of model modes (as assigned by
+      ! GYRE) agree with those expected from the asymptotic relation
+      ! (see set_orders_). Disagreement typically indicates mixed
+      ! modes, for which pairing modes by radial order when
+      ! evaluating frequency ratios may be unreliable. For now, any
+      ! disagreement is simply reported
+
+      ! Radial modes (since the zero point of the asymptotic orders is
+      ! arbitrary, compare order differences)
+
+      fr_chk = fr(0)
+      call set_orders_(fr_chk, 0)
+
+      n_bad = COUNT((fr_chk%n_pg - fr_chk%n_pg(1)) /= (fr(0)%n_pg - fr(0)%n_pg(1)))
+
+      if (n_bad > 0) then
+         write(ERROR_UNIT, 100) n_bad, 0
+      end if
+
+      ! Non-radial modes (the asymptotic orders are referenced to the
+      ! model radial orders, so can be compared directly)
+
+      do l = 1, UBOUND(fr, 1)
+
+         if (fr(l)%n == 0) cycle
+
+         fr_chk = fr(l)
+         call set_orders_(fr_chk, l, fr(0))
+
+         n_bad = COUNT(fr_chk%n_pg /= fr(l)%n_pg)
+
+         if (n_bad > 0) then
+            write(ERROR_UNIT, 100) n_bad, l
+         end if
+
+      end do
+
+100   format('Warning: ', I0, ' model mode(s) with l=', I0, &
+         ' have radial orders inconsistent with the asymptotic relation (mixed modes?)')
+
+      ! Finish
+
+      return
+
+   end subroutine check_mod_orders
+
+   !****
+
+   subroutine set_obs_freqs(l, fr)
+
+      integer, intent(in)       :: l
+      type(freqs_t), intent(in) :: fr
+
+      ! Set observational frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr_obs_m(l) = fr
+
+      ! Finish
+
+      return
+
+   end subroutine set_obs_freqs
+
+   !****
+
+   subroutine set_mod_freqs(l, fr)
+
+      integer, intent(in)       :: l
+      type(freqs_t), intent(in) :: fr
+
+      ! Set model frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr_mod_m(l) = fr
+
+      ! Finish
+
+      return
+
+   end subroutine set_mod_freqs
+
+   !****
+
+   function get_obs_freqs(l) result(fr)
+
+      integer, intent(in) :: l
+      type(freqs_t)       :: fr
+
+      ! Get observational frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr = fr_obs_m(l)
+
+      ! Finish
+
+      return
+
+   end function get_obs_freqs
+
+   !****
+
+   function get_mod_freqs(l) result(fr)
+
+      integer, intent(in) :: l
+      type(freqs_t)       :: fr
+
+      ! Get model frequency data for harmonic degree l
+
+      @:ASSERT(l >= 0 .AND. l <= L_MAX, 'invalid harmonic degree')
+
+      fr = fr_mod_m(l)
+
+      ! Finish
+
+      return
+
+   end function get_mod_freqs
+
+   !****
+
+   subroutine apply_cubic_correction(fr_mod, fr_obs, fr_cor)
+
+      type(freqs_t), intent(in)  :: fr_obs(0:)
+      type(freqs_t), intent(in)  :: fr_mod(0:)
+      type(freqs_t), intent(out) :: fr_cor(0:)
+
+      real(RD) :: X, y, XtX, Xty
+      integer  :: i, l
+      real(RD) :: a3 ! Coefficient of cubic term
+
+      call match_modes_(fr_mod, fr_obs, fr_cor)
+
+      XtX = 0._RD
+      Xty = 0._RD
+      X = 0._RD
+      y = 0._RD
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            X = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
+
+            XtX = XtX + X*X
+            Xty = Xty + X*y
+         end do
+      end do
+
+      a3 = Xty/XtX
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + a3*fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)
+         end do
+      end do
+
+   end subroutine apply_cubic_correction
+
+   !****
+
+   subroutine apply_combined_correction(fr_mod, fr_obs, fr_cor)
+
+      type(freqs_t), intent(in)  :: fr_mod(0:)
+      type(freqs_t), intent(in)  :: fr_obs(0:)
+      type(freqs_t), intent(out) :: fr_cor(0:)
+
+      real(RD) :: X(2), y, XtX(2,2), XtXi(2,2), Xty(2), detXtX
+      integer  :: i, l
+      real(RD) :: a1 ! Coefficient of inverse term
+      real(RD) :: a3 ! Coefficient of cubic term
+
+      call match_modes_(fr_mod, fr_obs, fr_cor)
+
+      XtX = 0._RD
+      Xty = 0._RD
+      X = 0._RD
+      y = 0._RD
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            X(1) = fr_cor(l)%nu(i)**(-1)/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            X(2) = fr_cor(l)%nu(i)**3/fr_cor(l)%E_norm(i)/fr_obs(l)%dnu(i)
+            y = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
+
+            XtX(1,1) = XtX(1,1) + X(1)*X(1)
+            XtX(1,2) = XtX(1,2) + X(1)*X(2)
+            XtX(2,2) = XtX(2,2) + X(2)*X(2)
+            Xty(1) = Xty(1) + X(1)*y
+            Xty(2) = Xty(2) + X(2)*y
+         end do
+      end do
+
+      XtX(2,1) = XtX(1,2)
+
+      XtXi(1,1) = XtX(2,2)
+      XtXi(2,2) = XtX(1,1)
+      XtXi(1,2) = -XtX(1,2)
+      XtXi(2,1) = -XtX(2,1)
+
+      detXtX = XtX(1,1)*XtX(2,2) - XtX(1,2)*XtX(2,1)
+      XtXi = XtXi/detXtX
+
+      a1 = XtXi(1,1)*Xty(1) + XtXi(1,2)*Xty(2)
+      a3 = XtXi(2,1)*Xty(1) + XtXi(2,2)*Xty(2)
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_cor(l)%n < 1) cycle
+         do i = 1, fr_obs(l)%n
+            fr_cor(l)%nu(i) = fr_cor(l)%nu(i) &
+               + (a1*fr_cor(l)%nu(i)**(-1) + a3*fr_cor(l)%nu(i)**3) &
+               /fr_cor(l)%E_norm(i)
+         end do
+      end do
+
+   end subroutine apply_combined_correction
+
+   !****
+
+   subroutine match_modes_(fr_mod, fr_obs, fr_cor)
+
+      ! ported from MESA, see
+      ! $MESA_DIR/star/astero/src/astero_support.f:set_to_closest
+      ! $MESA_DIR/star/astero/src/astero_support.f:find_closest
+
+      type(freqs_t), intent(in)  :: fr_mod(0:3)
+      type(freqs_t), intent(in)  :: fr_obs(0:3)
+      type(freqs_t), intent(out) :: fr_cor(0:3)
+      integer                    :: l, i, j, j_prev, j_min_dist
+      real(RD)                   :: dist, min_dist
+
+      do l = 0, 3
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_mod(l)%n < 1) cycle
+
+         fr_cor(l) = fr_obs(l)
+
+         j_prev = 0
+         do i = 1, fr_obs(l)%n
+            ! j = find_closest(fr_obs(l)*nu(i), j_prev)
+            min_dist = 1d99
+            j_min_dist = -1
+
+            !          do j = j_prev + 1, fr_mod(l)%n
+            do j = 1, fr_mod(l)%n
+               dist = ABS(fr_mod(l)%nu(j) - fr_obs(l)%nu(i))
+               if (j_min_dist <= 0 .or. dist < min_dist) then
+                  min_dist = dist
+                  j_min_dist = j
+               end if
+               if (fr_mod(l)%nu(j) > fr_obs(l)%nu(i)) exit
+            end do
+
+            j = j_min_dist
+
+            if (j <= 0) stop 'failed to match modes'
+
+            fr_cor(l)%nu(i) = fr_mod(l)%nu(j)
+            fr_cor(l)%E_norm(i) = fr_mod(l)%E_norm(j)
+            fr_cor(l)%n_pg(i) = fr_mod(l)%n_pg(j)
+            j_prev = j
+         end do
+      end do
+
+   end subroutine match_modes_
+
+end module freqs_m

@@ -1,0 +1,205 @@
+! Module  : chisq_m
+! Purpose : chi-squared evaluation
+!
+! Copyright 2016-2026 Rich Townsend
+
+#:include 'em.inc'
+
+#:include 'forum.inc'
+
+module chisq_m
+
+   ! Uses
+
+   use forum_m, only: RD
+
+   use freqs_m
+   use ratios_m
+
+   use f95_lapack
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none (type, external)
+
+   ! Access specifiers
+
+   private
+
+   public :: eval_chisq_radial
+   public :: eval_chisq_all
+   public :: eval_chisq_ratios
+
+   ! Procedures
+
+contains
+
+   subroutine eval_chisq_radial(fr_mod, fr_obs, chisq)
+
+      type(freqs_t), intent(in) :: fr_mod(0:)
+      type(freqs_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)     :: chisq
+
+      ! Evaluate the chisq for observed vs model frequencies, radial
+      ! modes only
+
+      chisq = SUM((fr_mod(0)%nu - fr_obs(0)%nu)**2/fr_obs(0)%dnu**2)
+
+      ! Finish
+
+   end subroutine eval_chisq_radial
+
+   !****
+
+   subroutine eval_chisq_all(fr_mod, fr_obs, chisq)
+
+      type(freqs_t), intent(in) :: fr_mod(0:)
+      type(freqs_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)     :: chisq
+
+      integer :: l
+
+      ! Evaluate the chisq for observed vs model frequencies, all
+      ! modes
+
+      chisq = 0._RD
+
+      do l = 0, L_MAX
+         chisq = chisq + SUM((fr_mod(l)%nu - fr_obs(l)%nu)**2/fr_obs(l)%dnu**2)
+      end do
+
+      ! Finish
+
+   end subroutine eval_chisq_all
+
+   !****
+
+   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq)
+
+      type(freqs_t), intent(in) :: fr_mod(0:)
+      type(freqs_t), intent(in) :: fr_obs(0:)
+      real(RD), intent(out)     :: chisq
+
+      logical, parameter :: DEBUG = .FALSE.
+
+      type(ratios_t)        :: rt_010_obs
+      type(ratios_t)        :: rt_02_obs
+      type(ratios_t)        :: rt_13_obs
+      type(ratios_t)        :: rt_010_mod
+      type(ratios_t)        :: rt_02_mod
+      type(ratios_t)        :: rt_13_mod
+      integer               :: n
+      real(RD), allocatable :: J(:,:)
+      integer               :: i
+      integer               :: l
+      integer               :: k
+      real(RD), allocatable :: delta_ratio(:)
+      real(RD), allocatable :: C(:,:)
+      real(RD), allocatable :: inv_C_delta_ratio(:)
+
+      ! Evaluate the chisq for observed vs model frequency *ratios*
+
+      ! The ratios combine modes according to their radial
+      ! orders. Observed frequencies are assumed to carry orders
+      ! assigned from the asymptotic relation (i.e., constructed via
+      ! freqs_t_auto_); model frequencies carry the orders assigned
+      ! by GYRE, which follow the same convention for pure p modes
+      ! but not for mixed modes. Check for the latter
+
+      call check_mod_orders(fr_mod)
+
+      ! Evaluate frequency ratios for both observed and model data
+      ! (interpolating the ratios for the latter onto the frequencies
+      ! of the former). Note that, unlike AMP 1.3, both r01 and r10
+      ! are included in the fit, with their correlations captured by
+      ! the full covariance matrix
+
+      rt_010_obs = ratios_t(fr_obs, 'R010')
+      rt_02_obs = ratios_t(fr_obs, 'R02')
+      rt_13_obs = ratios_t(fr_obs, 'R13')
+
+      rt_010_mod = ratios_t(fr_mod, 'R010', rt_010_obs)
+      rt_02_mod = ratios_t(fr_mod, 'R02', rt_02_obs)
+      rt_13_mod = ratios_t(fr_mod, 'R13', rt_13_obs)
+
+      ! Construct the Jacobian matrix (with errors folded in) by
+      ! performing finite-differencing on the observed frequencies
+
+      n = rt_010_obs%n + rt_02_obs%n + rt_13_obs%n
+
+      allocate(J(n,SUM(fr_obs%n)))
+
+      i = 1
+
+      do l = 0, L_MAX
+         do k = 1, fr_obs(l)%n
+
+            ! Store the derivatives of the ratios in a column of the
+            ! Jacobian matrix, folding in the error associated with
+            ! this observed frequency
+
+            J(:,i) = [eval_ratios_deriv(fr_obs, l, k, 'R010'), &
+               eval_ratios_deriv(fr_obs, l, k, 'R02'), &
+               eval_ratios_deriv(fr_obs, l, k, 'R13')] * fr_obs(l)%dnu(k)
+
+            i = i + 1
+
+         end do
+      end do
+
+      ! Evaluate the covariance matrix
+
+      C = MATMUL(J, TRANSPOSE(J))
+
+      ! (Possibly) write out the ratios, in the same format as AMP 1.3
+      ! (ratio, nu_ref, rt_obs, rt_err, rt_mod)
+
+      if (DEBUG) then
+         call write_ratios_(rt_010_obs, rt_010_mod, C, 0)
+         call write_ratios_(rt_02_obs, rt_02_mod, C, rt_010_obs%n)
+         call write_ratios_(rt_13_obs, rt_13_mod, C, rt_010_obs%n + rt_02_obs%n)
+      end if
+
+      ! Evaluate the chisq
+
+      delta_ratio = &
+         [rt_010_mod%ratio,rt_02_mod%ratio,rt_13_mod%ratio] - &
+         [rt_010_obs%ratio,rt_02_obs%ratio,rt_13_obs%ratio]
+
+      inv_C_delta_ratio = delta_ratio
+
+      call LA_GESV(C, inv_C_delta_ratio)
+
+      chisq = DOT_PRODUCT(delta_ratio, inv_C_delta_ratio)
+
+      ! Finish
+
+      return
+
+   contains
+
+      subroutine write_ratios_(rt_obs, rt_mod, C, offset)
+
+         type(ratios_t), intent(in) :: rt_obs
+         type(ratios_t), intent(in) :: rt_mod
+         real(RD), intent(in)       :: C(:,:)
+         integer, intent(in)        :: offset
+
+         integer :: i
+
+         do i = 1, rt_obs%n
+            write(OUTPUT_UNIT, '(A3,1X,F7.2,3(1X,F10.8))') &
+               rt_obs%label(i), rt_obs%nu(i), rt_obs%ratio(i), SQRT(C(offset+i,offset+i)), rt_mod%ratio(i)
+         end do
+
+         ! Finish
+
+         return
+
+      end subroutine write_ratios_
+
+   end subroutine eval_chisq_ratios
+
+end module chisq_m

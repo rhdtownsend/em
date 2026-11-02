@@ -35,11 +35,6 @@ real function userff (npar, data, myid)
 
    integer, dimension(5) :: spec
 
-   integer, dimension(:), allocatable :: nl0
-   integer, dimension(:), allocatable :: nl1
-   integer, dimension(:), allocatable :: nl2
-   integer, dimension(:), allocatable :: nl3
-
    character(len=1) :: lchr
 
    real(RD) :: f
@@ -80,9 +75,9 @@ real function userff (npar, data, myid)
    real(RD), dimension(:), allocatable :: dnu3
    real(RD), dimension(:), allocatable :: Enorm3
 
-   type(freq_t) :: fr_obs(0:3)
-   type(freq_t) :: fr_mod(0:3)
-   type(freq_t) :: fr_cor(0:3)
+   type(freqs_t) :: fr_obs(0:3)
+   type(freqs_t) :: fr_mod(0:3)
+   type(freqs_t) :: fr_cor(0:3)
 
    ! Initialize EM
 
@@ -116,10 +111,6 @@ real function userff (npar, data, myid)
 
 50 continue
 
-   allocate ( nl0(l0) )
-   allocate ( nl1(l1) )
-   allocate ( nl2(l2) )
-   allocate ( nl3(l3) )
    allocate ( nu0(l0) )
    allocate ( nu1(l1) )
    allocate ( nu2(l2) )
@@ -177,25 +168,21 @@ real function userff (npar, data, myid)
          read(lchr,*) ll
          if(ll == 0) then
             l0=l0+1
-            nl0(l0)=l0
             nu0(l0)=f
             dnu0(l0)=e
             Enorm0(l0)=1.d0
          elseif(ll == 1) then
             l1=l1+1
-            nl1(l1)=l1
             nu1(l1)=f
             dnu1(l1)=e
             Enorm1(l1)=1.d0
          elseif(ll == 2) then
             l2=l2+1
-            nl2(l2)=l2
             nu2(l2)=f
             dnu2(l2)=e
             Enorm2(l2)=1.d0
          elseif(ll == 3) then
             l3=l3+1
-            nl3(l3)=l3
             nu3(l3)=f
             dnu3(l3)=e
             Enorm3(l3)=1.d0
@@ -205,10 +192,14 @@ real function userff (npar, data, myid)
 
    close(unit)
 
-   fr_obs(0) = freq_t(nu0,dnu0,Enorm0,nl0)
-   fr_obs(1) = freq_t(nu1,dnu1,Enorm1,nl1)
-   fr_obs(2) = freq_t(nu2,dnu2,Enorm2,nl2)
-   fr_obs(3) = freq_t(nu3,dnu3,Enorm3,nl3)
+   ! Construct observed frequency data, with radial orders assigned
+   ! from the asymptotic relation (the radial modes must be
+   ! constructed first)
+
+   fr_obs(0) = freqs_t(nu0,dnu0,Enorm0,0)
+   fr_obs(1) = freqs_t(nu1,dnu1,Enorm1,1,fr_obs(0))
+   fr_obs(2) = freqs_t(nu2,dnu2,Enorm2,2,fr_obs(0))
+   fr_obs(3) = freqs_t(nu3,dnu3,Enorm3,3,fr_obs(0))
 
    call set_obs_freqs(0, fr_obs(0))
    call set_obs_freqs(1, fr_obs(1))
