@@ -76,9 +76,9 @@ real function userff (npar, data, myid)
    real(RD), dimension(:), allocatable :: dnu3
    real(RD), dimension(:), allocatable :: Enorm3
 
-   type(freqs_t) :: fr_obs(0:3)
-   type(freqs_t) :: fr_mod(0:3)
-   type(freqs_t) :: fr_cor(0:3)
+   type(freqs_t) :: fr_obs(0:L_MAX)
+   type(freqs_t) :: fr_mod(0:L_MAX)
+   type(freqs_t) :: fr_cor(0:L_MAX)
 
    ! Initialize EM
 

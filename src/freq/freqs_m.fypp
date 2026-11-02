@@ -386,7 +386,7 @@ contains
       X = 0._RD
       y = 0._RD
 
-      do l = 0, 3
+      do l = 0, L_MAX
          if (fr_obs(l)%n < 1) cycle
          if (fr_cor(l)%n < 1) cycle
          do i = 1, fr_obs(l)%n
@@ -400,7 +400,7 @@ contains
 
       a3 = Xty/XtX
 
-      do l = 0, 3
+      do l = 0, L_MAX
          if (fr_obs(l)%n < 1) cycle
          if (fr_cor(l)%n < 1) cycle
          do i = 1, fr_obs(l)%n
@@ -431,7 +431,7 @@ contains
       X = 0._RD
       y = 0._RD
 
-      do l = 0, 3
+      do l = 0, L_MAX
          if (fr_obs(l)%n < 1) cycle
          if (fr_cor(l)%n < 1) cycle
          do i = 1, fr_obs(l)%n
@@ -460,7 +460,7 @@ contains
       a1 = XtXi(1,1)*Xty(1) + XtXi(1,2)*Xty(2)
       a3 = XtXi(2,1)*Xty(1) + XtXi(2,2)*Xty(2)
 
-      do l = 0, 3
+      do l = 0, L_MAX
          if (fr_obs(l)%n < 1) cycle
          if (fr_cor(l)%n < 1) cycle
          do i = 1, fr_obs(l)%n
@@ -480,13 +480,13 @@ contains
       ! $MESA_DIR/star/astero/src/astero_support.f:set_to_closest
       ! $MESA_DIR/star/astero/src/astero_support.f:find_closest
 
-      type(freqs_t), intent(in)  :: fr_mod(0:3)
-      type(freqs_t), intent(in)  :: fr_obs(0:3)
-      type(freqs_t), intent(out) :: fr_cor(0:3)
+      type(freqs_t), intent(in)  :: fr_mod(0:L_MAX)
+      type(freqs_t), intent(in)  :: fr_obs(0:L_MAX)
+      type(freqs_t), intent(out) :: fr_cor(0:L_MAX)
       integer                    :: l, i, j, j_prev, j_min_dist
       real(RD)                   :: dist, min_dist
 
-      do l = 0, 3
+      do l = 0, L_MAX
          if (fr_obs(l)%n < 1) cycle
          if (fr_mod(l)%n < 1) cycle
 

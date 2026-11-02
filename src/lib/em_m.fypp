@@ -48,6 +48,7 @@ module em_m
    private
 
    public :: RD
+   public :: L_MAX
    public :: init_em
    public :: final_em
    public :: create_star

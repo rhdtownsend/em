@@ -67,6 +67,8 @@ contains
       chisq = 0._RD
 
       do l = 0, L_MAX
+         if (fr_obs(l)%n < 1) cycle
+         if (fr_mod(l)%n < 1) cycle
          chisq = chisq + SUM((fr_mod(l)%nu - fr_obs(l)%nu)**2/fr_obs(l)%dnu**2)
       end do
 
