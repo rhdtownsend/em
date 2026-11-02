@@ -75,9 +75,9 @@ program em_test
    call evolve_star_to_zams(id, t_code)
 
    if (t_code == t_ok) then
-      print *,'Evolve to ZAMS: OK'
+      print *, 'Evolve to ZAMS: OK'
    else
-      print *,'Evolve to ZAMS: Failed, termination code =', t_code
+      print *, 'Evolve to ZAMS: Failed, termination code =', t_code
       stop
    end if
 
@@ -86,11 +86,11 @@ program em_test
    call evolve_star_seismic(id, t_code, best_profile_filename='profile_best.data')
 
    if (t_code == t_ok) then
-      print *,'Evolve to seismic: OK'
+      print *, 'Evolve to seismic: OK'
    elseif (t_code == t_max_age) then
-      print *,'Evolve to seismic: Reached maximum age'
+      print *, 'Evolve to seismic: Reached maximum age'
    else
-      print *,'Evolve to seismic: Failed, termination code =', t_code
+      print *, 'Evolve to seismic: Failed, termination code =', t_code
       stop
    endif
 
@@ -98,12 +98,12 @@ program em_test
 
    call get_mod_data(Teff, logg, FeH, R, L, age)
 
-   print *,'Teff:', Teff
-   print *,'logg:', logg
-   print *,'FeH:', FeH
-   print *,'R:', R
-   print *,'L:', L
-   print *,'age:', age
+   print *, 'Teff:', Teff
+   print *, 'logg:', logg
+   print *, 'FeH:', FeH
+   print *, 'R:', R
+   print *, 'L:', L
+   print *, 'age:', age
 
    ! Get model frequencies
 
@@ -111,13 +111,13 @@ program em_test
    fr_mod_1 = get_mod_freqs(1)
    fr_mod_2 = get_mod_freqs(2)
 
-   print *,'l=0 results (n_pg, nu, E_norm):'
+   print *, 'l=0 results (n_pg, nu, E_norm):'
    call write_results_(fr_mod_0)
 
-   print *,'l=1 results (n_pg, nu, E_norm):'
+   print *, 'l=1 results (n_pg, nu, E_norm):'
    call write_results_(fr_mod_1)
 
-   print *,'l=2 results (n_pg, nu, E_norm):'
+   print *, 'l=2 results (n_pg, nu, E_norm):'
    call write_results_(fr_mod_2)
 
    ! Destroy the star
@@ -139,7 +139,7 @@ contains
       integer :: i
 
       do i = 1, fr%n
-         print *,'  ', fr%n_pg(i), fr%nu(i), fr%E_norm(i)
+         print *, '  ', fr%n_pg(i), fr%nu(i), fr%E_norm(i)
       end do
 
       ! Finish

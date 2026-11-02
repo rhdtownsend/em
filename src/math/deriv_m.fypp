@@ -148,7 +148,7 @@ contains
 
       df_dx(1) = p(1)
 
-      do i = 2,n-1
+      do i = 2, n-1
          df_dx(i) = (SIGN(1._RD, s(i-1)) + SIGN(1._RD, s(i)))* &
             MIN(abs(s(i-1)), abs(s(i)), 0.5_RD*abs(p(i)))
       end do
