@@ -59,14 +59,17 @@ export SRC_DIRS := $(SRC_DIR)/lib $(SRC_DIR)/mesa $(SRC_DIR)/gyre $(SRC_DIR)/fre
 install : build | $(BIN_DIR) $(LIB_DIR) $(PKG_DIR) $(INC_DIR)
 	@$(MAKE) -C build $@
 
-build : $(PKG_DIR)/mesa.pc $(PKG_DIR)/gyre.pc
+build : $(PKG_DIR)/mesa.pc $(PKG_DIR)/gyre.pc $(PKG_DIR)/forum.pc
 	@$(MAKE) -C build $@
 
-$(PKG_DIR)/mesa.pc : $(SRC_DIR)/pkgconfig/mesa.pc.in | $(PKG_DIR)
+$(PKG_DIR)/mesa.pc : $(SRC_DIR)/pkgconfig/mesa.pc.in $(PKG_DIR)/forum.pc
 	@$(SCT_DIR)/configure_mesa.sh $< $@
 
-$(PKG_DIR)/gyre.pc : $(SRC_DIR)/pkgconfig/gyre.pc.in | $(PKG_DIR)
+$(PKG_DIR)/gyre.pc : $(SRC_DIR)/pkgconfig/gyre.pc.in $(PKG_DIR)/forum.pc
 	@$(SCT_DIR)/configure_gyre.sh $< $@
+
+$(PKG_DIR)/forum.pc : $(SRC_DIR)/pkgconfig/forum.pc.in | $(PKG_DIR)
+	@$(SCT_DIR)/configure_forum.sh $< $@
 
 clean :
 	@$(MAKE) -C build $@

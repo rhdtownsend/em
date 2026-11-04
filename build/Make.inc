@@ -52,6 +52,7 @@ ifeq ($(SHARED),yes)
 else
    LIB_FILES := $(STATIC_LIB_FILES)
    LIB_SUFFIX := $(STATIC_LIB_SUFFIX)
+   PKGCONF_FLAGS += -static
 endif
 
 ALL_SRCS := $(sort $(foreach target,$(BIN_TARGETS) $(LIB_TARGETS),$($(target)_SRCS) $($(target)_USES)))
@@ -115,6 +116,8 @@ else
    FPPFLAGS += -DLOG_LEVEL=\'INFO\'
 endif
 
+FPPFLAGS += `pkgconf $(PKGCONF_FLAGS) --cflags-only-I $(PKGS)`
+
 # Rules
 
 %.f90 : %.fypp | $(DEPEND_DIR)
@@ -160,6 +163,8 @@ endif
 ifeq ($(SHARED),yes)
    FFLAGS += -fPIC
 endif
+
+FFLAGS += `pkgconf $(PKGCONF_FLAGS) --cflags $(PKGS)`
 
 # Rules
 
@@ -207,6 +212,8 @@ endif
 ifeq ($(OMP),yes)
    LDFLAGS += -fopenmp
 endif
+
+LDFLAGS += `pkgconf $(PKGCONF_FLAGS) --libs $(PKGS)`
 
 # Rules
 

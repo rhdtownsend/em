@@ -6,6 +6,6 @@ Name: mesa
 Description: MESA libraries
 URL: https://github.com/MESAHub/mesa
 Version: 26.4.1
-Requires: lapack blas hdf5_fortran pgplot
+Requires.private: lapack blas hdf5_fortran pgplot crmath forum
 Cflags: -I${includedir} -I${prefix}/star/make
-Libs: -Wl,-rpath,${libdir} -L${libdir} -lstar -lstar_data -lionization -latm -lcolors -lturb -lnet -leos -lkap -lrates -lneu -lchem -linterp_2d -linterp_1d -lnum -lauto_diff -lforum -lmtx -lconst -lutils -lmath
+Libs: -Wl,-rpath,${libdir} -L${libdir} -lstar -lstar_data -lionization -latm -lcolors -lturb -lnet -leos -lkap -lrates -lneu -lchem -linterp_2d -linterp_1d -lnum -lauto_diff -lmtx -lconst -lutils -lmath

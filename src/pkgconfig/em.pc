@@ -5,8 +5,7 @@ includedir=${prefix}/include
 Name: em
 Description: Embedded MESA (main library)
 URL: https://github.com/rhdtownsend/em
-Version: 2.0
-Requires.private: gyre == 9.1.1 forum == 1.2.3
+Version: 2.1
+Requires.private: gyre == 9.1.1 mesa == 26.4.1 lapack95
 Cflags: -I${includedir}
 Libs: -Wl,-rpath,${libdir} -L${libdir} -lem
-

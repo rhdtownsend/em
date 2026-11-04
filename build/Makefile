@@ -36,7 +36,7 @@ libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freqs_m.fypp ratios_m.fypp 
 
 # Build flags
 
-PKGS := gyre mesa lapack95
+PKGS := gyre mesa forum lapack95
 
 PKGCONF_FLAGS := --with-path=$(PKG_DIR)
 
@@ -48,10 +48,6 @@ else
 endif
 
 PKGCONF_FLAGS += --define-variable=math_slot=$(MATH_SLOT)
-
-FFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags $(PKGS)`
-FPPFLAGS := `pkgconf $(PKGCONF_FLAGS) --cflags-only-I $(PKGS)`
-LDFLAGS := `pkgconf $(PKGCONF_FLAGS) --libs $(PKGS)`
 
 unexport MESASDK_MATH_SLOT
 

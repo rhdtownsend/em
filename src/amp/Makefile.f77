@@ -1,19 +1,20 @@
 F77 = gfortran
 FFLAGS = -O2 -fall-intrinsics
 
-# TSM - 06/04/2020 ###########################################################
+# Example of how to compile/link testffamp2
 
-FFINCL = -I$(MESA_DIR)/include -I$(MESA_DIR)/star/make -I$(GYRE_DIR)/src/build -finit-real=snan -fbacktrace -fmax-errors=25 -fcheck=all -Wall -Wno-unused-dummy-argument -Wno-maybe-uninitialized -finline-limit=0 -ggdb -std=f2008 -fopenmp 
+PKG_DIR := ../../lib/pkgconfig
 
-FFDEPS = ff_amp2.o em_lib.o em_gyre.o em_freq.o em_util.o gyre_*.o core_*.o
+FFINCL := -fopenmp `pkgconf --with-path=$(PKG_DIR) --define-variable=math_slot=crmath --cflags em`
 
-FFLIBS = -L$(MESA_DIR)/lib -lstar -lstar_data -lionization -latm -lcolors -lnet -leos -lkap -lrates -lneu -lchem -linterp_2d -linterp_1d -lnum -lmtx -lconst -lutils -lmath `mesasdk_lapack_link` `mesasdk_blas_link` `mesasdk_hdf5_link` `mesasdk_pgplot_link` -lz `lapack95_link` `crmath_link` `crlibm_link` `hdf5_link`
+FFDEPS = ../../build/ff_amp2.o
 
-testffamp2: $(FFDEPS)
-	$(F77) $(FFLAGS) $(FFINCL) -o ../../testffamp2 userff.f $(FFDEPS) $(FFLIBS)
+FFLIBS = `pkgconf --with-path=$(PKG_DIR) --define-variable=math_slot=crmath --libs em crmath --static`
 
+testffamp2: $(FFDEPS) ../frontend/testffamp2.f
+	$(F77) $(FFLAGS) $(FFINCL) -o ../../testffamp2 $^ $(FFLIBS)
 
-# TSM - 08/15/2005 ###########################################################
+#
 
 MPIF77      = mpif77
 MPIFFLAGS   = -fc=gfortran -O2
