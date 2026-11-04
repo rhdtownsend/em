@@ -49,6 +49,13 @@ module em_m
 
    public :: RD
    public :: L_MAX
+   public :: Teff_m
+   public :: logg_m
+   public :: FeH_m
+   public :: R_m
+   public :: L_m
+   public :: age_m
+   public :: rcz_m
    public :: init_em
    public :: final_em
    public :: create_star
