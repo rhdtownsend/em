@@ -2,7 +2,7 @@
 c ---------------------------------------------
 c fitness function slave program
 c ---------------------------------------------
-      use em_lib, only: age_m, R_m, Teff_m, FeH_m, Rcz_m
+      use em_m, only: age_m, R_m, Teff_m, FeH_m, Rcz_m
       implicit none
 
       include 'mpif.h'
