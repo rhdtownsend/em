@@ -1,0 +1,74 @@
+MESA 26.04.1 patch: place pulse-data double points using composition gradients
+
+When add_double_points_to_pulse_data is enabled (EM sets it, with
+threshold_grad_mu_for_double_point = 1), MESA places double points
+where |dln(mu)/dln(P)| exceeds the threshold. It uses s%mu, which
+includes the free electrons supplied by the EOS, so partial ionization
+zones (where the composition is uniform) also trigger double points.
+Each one inserts a spurious 1-4% density discontinuity into the
+pulsation model, and as faces cross the threshold the GYRE frequencies
+jump by up to ~0.6 uHz. This stalls the bisection in
+evolve_star_seismic ("too many redos") for hot (~8500 K) models.
+
+This patch evaluates grad_mu from the composition-only mean molecular
+weight abar/(1 + zbar). The same change has been proposed for MESA
+main (branch pulse-double-points-composition).
+
+Apply from the top of the MESA 26.04.1 tree, then rebuild star:
+
+  cd $MESA_DIR
+  patch -p1 < /path/to/em/patches/mesa-26.04.1-double-points.patch
+  cd star && ./mk && ./export
+
+then relink EM (make clean && make).
+--- a/star/defaults/controls.defaults
++++ b/star/defaults/controls.defaults
+@@ -626,7 +626,10 @@
+       ! threshold_grad_mu_for_double_point
+       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+-      ! threshold in grad_mu = dln(mu)/dln(P) for a double point to be written
++      ! threshold in grad_mu = dln(mu)/dln(P) for a double point to be written. Here
++      ! mu is the mean molecular weight of the composition alone (``abar/(1 + zbar)``,
++      ! i.e. assuming full ionization), so that ionization zones do not trigger double
++      ! points
+ 
+       ! ::
+ 
+--- a/star/private/pulse_utils.f90
++++ b/star/private/pulse_utils.f90
+@@ -48,6 +48,7 @@
+ 
+     logical, parameter :: dbg = .false.
+ 
++    real(dp) :: mu_comp(s%nz)
+     real(dp) :: grad_mu(s%nz)
+     logical  :: mask(s%nz)
+     integer  :: k
+@@ -61,16 +62,23 @@
+ 
+     if (s%add_double_points_to_pulse_data) then
+ 
+-       ! Calculate grad_mu
++       ! Calculate grad_mu from the mean molecular weight of the
++       ! composition alone, assuming full ionization. Using s%mu
++       ! (which includes the free electrons supplied by the EOS)
++       ! would also flag ionization zones, where the composition is
++       ! uniform; double points placed there introduce spurious
++       ! density discontinuities
+ 
++       mu_comp = s%abar(1:s%nz)/(1d0 + s%zbar(1:s%nz))
++
+        grad_mu(1) = 0d0
+ 
+        do k = 2, s%nz-1
+-          grad_mu(k) = log(s%mu(k)/s%mu(k-1))/log(s%Peos(k)/s%Peos(k-1))
++          grad_mu(k) = log(mu_comp(k)/mu_comp(k-1))/log(s%Peos(k)/s%Peos(k-1))
+        end do
+ 
+        if (include_last_face) then
+-          grad_mu(k) = log(s%mu(s%nz)/s%mu(s%nz-1))/log(s%Peos(s%nz)/s%Peos(s%nz-1))
++          grad_mu(k) = log(mu_comp(s%nz)/mu_comp(s%nz-1))/log(s%Peos(s%nz)/s%Peos(s%nz-1))
+        else
+           grad_mu(k) = 0d0
+        end if

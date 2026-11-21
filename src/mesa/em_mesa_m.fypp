@@ -39,6 +39,15 @@ module em_mesa_m
 
    integer, parameter :: t_ok = 0
 
+   ! Default candidate pre-MS central temperatures, tried in turn by
+   ! create_star until the pre-MS model converges. The MESA default
+   ! (3E5) lies close to the convergence threshold for M >~ 1 Msun,
+   ! and fails for many models in the AMP parameter range; 4E5-6E5
+   ! converged throughout M = 0.75-1.75 Msun in tests with
+   ! scripts/probe_failures.py
+
+   real(RD), parameter :: PRE_MS_T_C_DEFAULT(*) = [5E5_RD, 4E5_RD, 6E5_RD]
+
    ! Interfaces
 
    ! This overload (see also evolve_star_seismic_legacy_ in em_m)
@@ -66,7 +75,58 @@ module em_mesa_m
 
 contains
 
-   function create_star(M, Y, Z, alpha, f_ov, max_age) result(id)
+   function create_star(M, Y, Z, alpha, f_ov, max_age, pre_ms_T_c) result(id)
+
+      real(RD), intent(in)           :: M
+      real(RD), intent(in)           :: Y
+      real(RD), intent(in)           :: Z
+      real(RD), intent(in)           :: alpha
+      real(RD), intent(in)           :: f_ov
+      real(RD), intent(in)           :: max_age
+      real(RD), intent(in), optional :: pre_ms_T_c(:)
+      integer                        :: id
+
+      real(RD), allocatable :: T_c(:)
+      integer               :: i
+      integer               :: ierr
+
+      ! Create a star with the specified initial parameters, trying
+      ! each candidate pre-MS central temperature in turn until the
+      ! pre-MS model converges
+
+      if (PRESENT(pre_ms_T_c)) then
+         T_c = pre_ms_T_c
+      else
+         T_c = PRE_MS_T_C_DEFAULT
+      end if
+
+      @:ASSERT(SIZE(T_c) > 0, 'no pre-MS central temperatures given')
+
+      do i = 1, SIZE(T_c)
+
+         call create_star_try_(M, Y, Z, alpha, f_ov, max_age, T_c(i), id, ierr)
+
+         if (ierr == 0) then
+            if (i > 1) write(OUTPUT_UNIT, 100) 'create_star: pre-MS model converged with T_c =', T_c(i)
+            exit
+         end if
+
+         write(OUTPUT_UNIT, 100) 'create_star: pre-MS model failed to converge with T_c =', T_c(i)
+100      format(A, 1X, ES10.3)
+
+      end do
+
+      @:ASSERT(ierr == 0, 'failed in star_create_pre_ms_model (all T_c)')
+
+      ! Finish
+
+      return
+
+   end function create_star
+
+   !****
+
+   subroutine create_star_try_(M, Y, Z, alpha, f_ov, max_age, T_c, id, ierr)
 
       real(RD), intent(in) :: M
       real(RD), intent(in) :: Y
@@ -74,10 +134,12 @@ contains
       real(RD), intent(in) :: alpha
       real(RD), intent(in) :: f_ov
       real(RD), intent(in) :: max_age
-      integer              :: id
+      real(RD), intent(in) :: T_c
+      integer, intent(out) :: id
+      integer, intent(out) :: ierr
 
-      integer                  :: ierr
       type(star_info), pointer :: s
+      integer                  :: ierr_free
       real(RD)                 :: f0_ov_div_f_ov
       integer                  :: T_tau_id
 
@@ -224,7 +286,10 @@ contains
       @:ASSERT(ierr == 0, 'failed in atm_get_T_tau_base')
 
       ! Create the star as a pre-MS object (cannot start with a ZAMS
-      ! model, because we use non-standard helium abundances)
+      ! model, because we use non-standard helium abundances). On
+      ! failure, free the star and return the error to the caller
+
+      s%job%pre_ms_T_c = T_c
 
       call star_create_pre_ms_model(id, &
          s%job%pre_ms_T_c, &
@@ -237,7 +302,12 @@ contains
          s%job%change_net .OR. s%job%change_initial_net, &
          s%job%new_net_name, &
          s%job%pre_ms_relax_num_steps, ierr)
-      @:ASSERT(ierr == 0, 'failed in star_create_pre_ms_model')
+
+      if (ierr /= 0) then
+         call free_star(id, ierr_free)
+         @:ASSERT(ierr_free == 0, 'failed in free_star')
+         return
+      end if
 
       ! Set history and profile columns (this appears here because we
       ! don't use do_star_job_controls_after)
@@ -252,7 +322,7 @@ contains
 
       return
 
-   end function create_star
+   end subroutine create_star_try_
 
    !****
 

@@ -1,0 +1,204 @@
+! Program  : em_probe
+! Purpose  : probe whether MESA can create a star and evolve it to the
+!            ZAMS, for a single set of input parameters. Intended to
+!            be driven (one process per parameter set) by
+!            scripts/probe_failures.py, since a failure inside
+!            create_star aborts the process
+!
+! Copyright 2026 Rich Townsend
+
+#:include 'em.inc'
+
+program em_probe
+
+   ! Uses
+
+   use forum_m, only: RD
+   use em_m
+
+   use star_lib, only: star_ptr
+   use star_data_def, only: star_info
+
+   use ISO_FORTRAN_ENV
+
+   ! No implicit typing
+
+   implicit none (type, external)
+
+   ! Variables
+
+   integer       :: n_arg
+   integer       :: n_pos
+   integer       :: i
+   character(256) :: arg
+   real(RD), allocatable :: pre_ms_T_c(:)
+   real(RD)      :: log_g
+   logical       :: do_log_g
+   real(RD)      :: M
+   real(RD)      :: Y
+   real(RD)      :: Z
+   real(RD)      :: alpha
+   real(RD)      :: f_ov
+   real(RD)      :: max_age
+   integer       :: id
+   integer       :: t_code
+   integer       :: ierr
+   type(star_info), pointer :: s
+
+   ! Read arguments (positional, plus an optional T_c=v1,v2,...
+   ! giving the candidate pre-MS central temperatures)
+
+   n_arg = COMMAND_ARGUMENT_COUNT()
+   n_pos = 0
+
+   do_log_g = .FALSE.
+
+   do i = 1, n_arg
+      call GET_COMMAND_ARGUMENT(i, arg)
+      if (arg(:4) == 'T_c=') then
+         call parse_list_(arg(5:), pre_ms_T_c)
+      elseif (arg(:5) == 'logg=') then
+         read(arg(6:), *) log_g
+         do_log_g = .TRUE.
+      elseif (INDEX(arg, '=') > 0) then
+         write(ERROR_UNIT, *) 'Unknown keyword argument: ', TRIM(arg)
+         error stop 2
+      else
+         n_pos = n_pos + 1
+      end if
+   end do
+
+   if (n_pos < 4 .OR. n_pos > 6) then
+      write(ERROR_UNIT, *) 'Syntax: em_probe M Y Z alpha [f_ov [max_age]] [T_c=v1,v2,...] [logg=value]'
+      error stop 2
+   end if
+
+   M = real_arg_(1)
+   Y = real_arg_(2)
+   Z = real_arg_(3)
+   alpha = real_arg_(4)
+
+   if (n_pos >= 5) then
+      f_ov = real_arg_(5)
+   else
+      f_ov = 0._RD
+   end if
+
+   if (n_pos >= 6) then
+      max_age = real_arg_(6)
+   else
+      max_age = 1.5E10_RD
+   end if
+
+   write(OUTPUT_UNIT, 100) 'PARAMS', M, Y, Z, alpha, f_ov, max_age
+100 format('EM_PROBE ', A, 1X, 6(1X, ES24.16))
+
+   ! Initialize EM
+
+   call init_em()
+
+   ! Create the star (a failure here aborts the process)
+
+   write(OUTPUT_UNIT, 110) 'CREATE_START'
+110 format('EM_PROBE ', A)
+   flush(OUTPUT_UNIT)
+
+   if (ALLOCATED(pre_ms_T_c)) then
+      write(OUTPUT_UNIT, 130) 'T_C', pre_ms_T_c
+130   format('EM_PROBE ', A, *(1X, ES24.16))
+      id = create_star(M=M, Y=Y, Z=Z, alpha=alpha, f_ov=f_ov, max_age=max_age, pre_ms_T_c=pre_ms_T_c)
+   else
+      id = create_star(M=M, Y=Y, Z=Z, alpha=alpha, f_ov=f_ov, max_age=max_age)
+   end if
+
+   write(OUTPUT_UNIT, 110) 'CREATE_OK'
+   flush(OUTPUT_UNIT)
+
+   ! Evolve it to the ZAMS
+
+   call evolve_star_to_zams(id, t_code)
+
+   ! Report properties at the ZAMS (age/yr, Teff/K, L/Lsun, R/Rsun,
+   ! central X, model number)
+
+   call star_ptr(id, s, ierr)
+   @:ASSERT(ierr == 0, 'failed in star_ptr')
+
+   write(OUTPUT_UNIT, 140) 'ZAMS_PROPS', s%star_age, s%Teff, s%L_surf, s%photosphere_r, s%center_h1, s%model_number
+140 format('EM_PROBE ', A, 5(1X, ES24.16), 1X, I0)
+
+   write(OUTPUT_UNIT, 120) 'ZAMS_DONE', t_code
+120 format('EM_PROBE ', A, 1X, I0)
+   flush(OUTPUT_UNIT)
+
+   ! Optionally continue to a target log g, and report properties there
+
+   if (do_log_g .AND. t_code == t_ok) then
+
+      call evolve_star_to_log_g(id, log_g, t_code)
+
+      write(OUTPUT_UNIT, 140) 'LOGG_PROPS', s%star_age, s%Teff, s%L_surf, s%photosphere_r, s%center_h1, s%model_number
+      write(OUTPUT_UNIT, 120) 'LOGG_DONE', t_code
+      flush(OUTPUT_UNIT)
+
+   end if
+
+   ! Clean up
+
+   call destroy_star(id)
+
+   call final_em()
+
+   if (t_code /= t_ok) error stop 1
+
+contains
+
+   subroutine parse_list_(str, x)
+
+      character(*), intent(in)           :: str
+      real(RD), allocatable, intent(out) :: x(:)
+
+      integer :: stat
+      integer :: j
+
+      allocate(x(COUNT([(str(j:j) == ',', j=1, LEN_TRIM(str))]) + 1))
+
+      read(str, *, IOSTAT=stat) x
+      if (stat /= 0) then
+         write(ERROR_UNIT, *) 'Invalid T_c list: ', TRIM(str)
+         error stop 2
+      end if
+
+   end subroutine parse_list_
+
+   !****
+
+   function real_arg_(i) result(x)
+
+      integer, intent(in) :: i
+      real(RD)            :: x
+
+      character(256) :: arg
+      integer        :: stat
+      integer        :: j
+      integer        :: k
+
+      ! Return the i'th positional (non-keyword) argument
+
+      k = 0
+      do j = 1, COMMAND_ARGUMENT_COUNT()
+         call GET_COMMAND_ARGUMENT(j, arg)
+         if (INDEX(arg, '=') > 0) cycle
+         k = k + 1
+         if (k == i) exit
+      end do
+
+      read(arg, *, IOSTAT=stat) x
+      if (stat /= 0) then
+         write(ERROR_UNIT, *) 'Invalid numeric argument: ', TRIM(arg)
+         error stop 2
+      end if
+
+   end function real_arg_
+
+end program em_probe

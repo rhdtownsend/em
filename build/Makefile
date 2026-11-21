@@ -14,7 +14,7 @@ PKG_FILES = em.pc
 INC_FILES = em_m.mod em.inc
 
 ifeq ($(FRONTENDS),yes)
-   BIN_TARGETS += em_test testffamp2
+   BIN_TARGETS += em_test testffamp2 em_probe
 endif
 
 # Source file lists & related variables
@@ -30,6 +30,10 @@ em_test_LIBS = libem
 testffamp2_SRCS = testffamp2.f ff_amp2.fypp
 testffamp2_USES = $(libem_SRCS)
 testffamp2_LIBS = libem
+
+em_probe_SRCS = em_probe.fypp
+em_probe_USES = $(libem_SRCS)
+em_probe_LIBS = libem
 
 libem_SRCS = em_m.fypp em_mesa_m.fypp em_gyre_m.fypp freqs_m.fypp ratios_m.fypp chisq_m.fypp \
              interp_m.fypp deriv_m.fypp utils_m.fypp

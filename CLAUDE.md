@@ -10,6 +10,8 @@ EM ("Embedded MESA") is a Fortran library that drives MESA stellar evolution in-
 
 Requires the MESA SDK to be initialized (`$MESASDK_ROOT` set; minimum version enforced by `build/check_sdk_version`), plus `MESA_DIR` and `GYRE_DIR` pointing at builds whose versions exactly match `src/pkgconfig/mesa.pc.in` and `gyre.pc.in` (checked by `scripts/configure_*.sh`). When bumping MESA/GYRE, update the `Version:` in those `.pc.in` files (and `Requires.private` in `src/pkgconfig/em.pc`).
 
+The MESA build must also have `patches/mesa-26.04.1-double-points.patch` applied (it fixes pulse-data double points being placed in ionization zones, which makes GYRE frequencies jump and stalls `evolve_star_seismic` for hot models; instructions are in the patch header). The version check can't detect whether the patch has been applied. Drop the patch when bumping to a MESA release that includes the fix.
+
 ```
 make                  # build + install into bin/, lib/, include/, lib/pkgconfig/
 make DEBUG=yes        # -Og, -fcheck=all, -Wall, backtraces
