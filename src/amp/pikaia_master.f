@@ -29,7 +29,7 @@ c     Set control variables (use defaults)
 *** num trial soltns
       ctrl(1)=118
 *** num generations
-      ctrl(2)=200
+      ctrl(2)=100
 *** length of gene
       ctrl(3)=2
 *** crossover probability
