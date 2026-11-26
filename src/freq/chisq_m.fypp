@@ -53,23 +53,50 @@ contains
 
    !****
 
-   subroutine eval_chisq_all(fr_mod, fr_obs, chisq)
+   subroutine eval_chisq_all(fr_mod, fr_obs, chisq, verbose)
 
-      type(freqs_t), intent(in) :: fr_mod(0:)
-      type(freqs_t), intent(in) :: fr_obs(0:)
-      real(RD), intent(out)     :: chisq
+      type(freqs_t), intent(in)     :: fr_mod(0:)
+      type(freqs_t), intent(in)     :: fr_obs(0:)
+      real(RD), intent(out)         :: chisq
+      logical, intent(in), optional :: verbose
 
-      integer :: l
+      logical       :: verbose_
+      type(freqs_t) :: fr_cor(0:L_MAX)
+      integer       :: l
+      integer       :: i
+      real(RD)      :: resid
 
-      ! Evaluate the chisq for observed vs model frequencies, all
+      if (PRESENT(verbose)) then
+         verbose_ = verbose
+      else
+         verbose_ = .FALSE.
+      end if
+
+      ! Apply frequency corrections
+
+      call apply_combined_correction(fr_mod, fr_obs, fr_cor)
+
+      ! Evaluate the chisq for observed vs corrected model frequencies, all
       ! modes
 
       chisq = 0._RD
 
       do l = 0, L_MAX
+
          if (fr_obs(l)%n < 1) cycle
          if (fr_mod(l)%n < 1) cycle
-         chisq = chisq + SUM((fr_mod(l)%nu - fr_obs(l)%nu)**2/fr_obs(l)%dnu**2)
+
+         do i = 1, fr_obs(l)%n
+
+            resid = (fr_obs(l)%nu(i)-fr_cor(l)%nu(i))/fr_obs(l)%dnu(i)
+            chisq = chisq + resid**2
+
+            ! (Possibly) write out the frequencies and residual contribution
+
+            if (verbose_) print *, l, i, fr_cor(l)%n_pg(i), fr_obs(l)%nu(i), fr_obs(l)%dnu(i), &
+               fr_cor(l)%nu(i), resid
+
+         end do
       end do
 
       ! Finish
@@ -78,15 +105,15 @@ contains
 
    !****
 
-   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq, n_ratio)
+   subroutine eval_chisq_ratios(fr_mod, fr_obs, chisq, n_ratio, verbose)
 
-      type(freqs_t), intent(in) :: fr_mod(0:)
-      type(freqs_t), intent(in) :: fr_obs(0:)
-      real(RD), intent(out)     :: chisq
-      integer, intent(out)      :: n_ratio
+      type(freqs_t), intent(in)     :: fr_mod(0:)
+      type(freqs_t), intent(in)     :: fr_obs(0:)
+      real(RD), intent(out)         :: chisq
+      integer, intent(out)          :: n_ratio
+      logical, intent(in), optional :: verbose
 
-      logical, parameter :: DEBUG = .FALSE.
-
+      logical               :: verbose_
       type(ratios_t)        :: rt_010_obs
       type(ratios_t)        :: rt_02_obs
       type(ratios_t)        :: rt_13_obs
@@ -101,6 +128,12 @@ contains
       real(RD), allocatable :: delta_ratio(:)
       real(RD), allocatable :: C(:,:)
       real(RD), allocatable :: inv_C_delta_ratio(:)
+
+      if (PRESENT(verbose)) then
+         verbose_ = verbose
+      else
+         verbose_ = .FALSE.
+      end if
 
       ! Evaluate the chisq for observed vs model frequency *ratios*
 
@@ -159,7 +192,7 @@ contains
       ! (Possibly) write out the ratios, in the same format as AMP 1.3
       ! (ratio, nu_ref, rt_obs, rt_err, rt_mod)
 
-      if (DEBUG) then
+      if (verbose_) then
          call write_ratios_(rt_010_obs, rt_010_mod, C, 0)
          call write_ratios_(rt_02_obs, rt_02_mod, C, rt_010_obs%n)
          call write_ratios_(rt_13_obs, rt_13_mod, C, rt_010_obs%n + rt_02_obs%n)

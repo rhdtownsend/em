@@ -5,7 +5,7 @@
       double precision data(36),fitness
       real userff
       integer npar,i,myid
-      character*80 par_string
+      character(LEN=80) par_string
 
       npar = COMMAND_ARGUMENT_COUNT()
       do i=1,npar

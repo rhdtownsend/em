@@ -78,7 +78,6 @@ real function userff (npar, data, myid)
 
    type(freqs_t) :: fr_obs(0:L_MAX)
    type(freqs_t) :: fr_mod(0:L_MAX)
-   type(freqs_t) :: fr_cor(0:L_MAX)
 
    ! Initialize EM
 
@@ -268,15 +267,13 @@ real function userff (npar, data, myid)
 
          ! ...using frequency ratios
 
-         call eval_chisq_ratios(fr_mod, fr_obs, chisq_s, n_seis)
+         call eval_chisq_ratios(fr_mod, fr_obs, chisq_s, n_seis, verbose=myid==0)
 
       else
 
-         ! ...using (corrected) frequencies
+         ! ...using frequencies
 
-         call apply_combined_correction(fr_mod, fr_obs, fr_cor)
-
-         call eval_chisq_all(fr_cor, fr_obs, chisq_s)
+         call eval_chisq_all(fr_mod, fr_obs, chisq_s, verbose=myid==0)
 
          n_seis = n
 
